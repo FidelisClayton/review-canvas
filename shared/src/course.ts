@@ -11,10 +11,12 @@ export const parentOf = (f: PrFile): string | undefined => f.subjectOf ?? f.gene
 /** Order when no agent course exists: by layer, sources before their dependents, then by path. */
 export function defaultOrder(analysis: Analysis): string[] {
   const rank = (f: PrFile) => LAYERS.indexOf(f.layer);
+  // Within a layer, migrations come first: the models below them read their columns.
+  const lead = (f: PrFile) => (/^db\/migrate\//.test(f.path) ? 0 : 1);
   return analysis.files
     .filter(onCourse)
     .slice()
-    .sort((a, b) => rank(a) - rank(b) || Number(!!parentOf(a)) - Number(!!parentOf(b)) || a.path.localeCompare(b.path))
+    .sort((a, b) => rank(a) - rank(b) || lead(a) - lead(b) || Number(!!parentOf(a)) - Number(!!parentOf(b)) || a.path.localeCompare(b.path))
     .map((f) => f.id);
 }
 
@@ -42,10 +44,15 @@ export function normalizeOrder(analysis: Analysis, proposed: string[], warnings:
     order.push(id);
   }
   const missing = defaultOrder(analysis).filter((id) => !seen.has(id));
-  if (missing.length) {
-    warnings.push(`order: ${missing.length} file(s) were missing and were appended by layer: ${missing.map((id) => byId.get(id)!.path).join(", ")}.`);
-    order.push(...missing);
-  }
+  // Tests and generated files whose subject or source is on the course need no place of their
+  // own; they are seated beside it below. Only files that need a place are worth a warning.
+  const unplaced = missing.filter((id) => {
+    const p = parentOf(byId.get(id)!);
+    return !p || !(seen.has(p) || missing.includes(p));
+  });
+  if (unplaced.length) warnings.push(`order: ${unplaced.length} file(s) were missing and were appended by layer: ${unplaced.map((id) => byId.get(id)!.path).join(", ")}.`);
+  for (const id of missing) seen.add(id);
+  order.push(...missing);
 
   const dependents = new Map<string, string[]>();
   const roots: string[] = [];

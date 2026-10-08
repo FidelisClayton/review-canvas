@@ -4,7 +4,7 @@ import { defaultCourse, LAYER_INFO, onCourse, type Analysis, type CourseInput, t
 // may use, the diff of every hunk it should summarize, and the links the server already found,
 // and it leaves out bulk the agent has no judgement to add to (generated files).
 
-const MAX_HUNK_LINES = 80;
+const MAX_HUNK_LINES = 200;
 
 function fileHeading(f: PrFile, byId: Map<string, PrFile>) {
   const bits = [`${LAYER_INFO[f.layer].name}`, `+${f.additions} −${f.deletions}`, f.status];
@@ -14,14 +14,17 @@ function fileHeading(f: PrFile, byId: Map<string, PrFile>) {
   return `### ${f.id} \`${f.path}\`\n${bits.join(" · ")}`;
 }
 
-function hunkBlock(f: PrFile, full: boolean) {
+/** Generated output (orval clients, schema dumps, translation key types) needs no notes. */
+export const isGeneratedOutput = (f: PrFile) => f.noise === "api" || !!f.generatedFrom;
+
+function hunkBlock(f: PrFile, full: boolean, reviewId: string) {
   if (f.patchMissing) return "_GitHub sent no patch (binary or too large)._";
-  if (!full) return `_${f.hunks.length} hunk(s): ${f.hunks.map((h) => h.id).join(", ")}. Generated; no summary needed._`;
+  if (!full) return `_${f.hunks.length} hunk(s): ${f.hunks.map((h) => h.id).join(", ")}. Generated; no notes needed._`;
   return f.hunks
     .map((h) => {
       const lines = h.lines.map((l) => (l.kind === "add" ? "+" : l.kind === "del" ? "-" : " ") + l.text);
       const shown = lines.slice(0, MAX_HUNK_LINES);
-      if (lines.length > MAX_HUNK_LINES) shown.push(`… ${lines.length - MAX_HUNK_LINES} more lines`);
+      if (lines.length > MAX_HUNK_LINES) shown.push(`… ${lines.length - MAX_HUNK_LINES} more lines: run \`review-canvas show ${reviewId} ${h.id}\``);
       return `#### ${h.id} ${h.range} ${h.section}\n\`\`\`diff\n${shown.join("\n")}\n\`\`\``;
     })
     .join("\n\n");
@@ -46,21 +49,30 @@ Plan the order a reviewer should read this PR in, and write short notes. Edit th
 
 - \`route\`: two or three sentences on how the course runs and why, e.g. "Storage first, then the
   jobs that use it, the endpoint, then the UI."
-- \`order\`: every file id below that is on the course, in reading order. Follow how data and
-  calls flow: schema and models, domain, jobs, mail, contracts and HTTP, then the UI. Put the
-  hand-written TypeSpec \`.tsp\` before the controllers that implement it. You do not need to place
-  tests or generated files carefully: each one is moved directly after its subject or source.
+- \`order\`: file ids in reading order. Follow how data and calls flow: migrations, models,
+  domain, jobs, mail, the hand-written API contract (\`.tsp\`), routes, policies, controllers,
+  then the UI, config and docs last. Files marked "test of" or "generated from" ride beside their
+  subject or source automatically; you may leave them out of \`order\`. Every other file,
+  including tests with no subject, needs a place; any you leave out are appended by layer, with a
+  warning.
 - \`files.<id>.what\`: one sentence on what changed. \`files.<id>.why\`: one short sentence on why
   it comes at this point in the order ("Start here: everything below reads these columns.").
+  For tests, \`what\` is enough.
 - \`hunks.<id>\`: one sentence per hunk, saying what it does or what to check. Point out risks
   plainly ("Nothing checks the sync is failed before retrying it.").
-- \`links\`: optional extra relationships between hunks in different files, each with the exact
-  \`symbol\` that appears in both. The server rejects any link whose symbol is not in both hunks.
+- \`links\`: optional relationships the server missed, between hunks in different files. Give the
+  exact \`symbol\`: it must appear as a whole word (case-sensitive) in some line of both hunks,
+  context lines included, or the server rejects the link. A pair of hunks already linked below is
+  skipped, whatever the symbol.
 
-Write plainly. No marketing words, no restating the diff line by line. Leave generated files'
-notes empty.`,
+Write plainly. No marketing words, no restating the diff line by line. Generated files have no
+note slots; leave them alone.
+
+The repository is not checked out. To read more than the diff shows:
+\`review-canvas show ${analysis.id} <file-or-hunk-id>\` prints a whole hunk or file diff, and
+\`review-canvas cat ${analysis.id} <path>\` prints a file as it is at the head commit.`,
     `## Files on the course (${course.length})\n\n${course
-      .map((f) => `${fileHeading(f, byId)}\n\n${hunkBlock(f, f.noise !== "api")}`)
+      .map((f) => `${fileHeading(f, byId)}\n\n${hunkBlock(f, !isGeneratedOutput(f), analysis.id)}`)
       .join("\n\n")}`,
     analysis.links.length
       ? `## Links the server already found (${analysis.links.length})\n\nDo not repeat these.\n\n${analysis.links
@@ -80,7 +92,7 @@ export function courseTemplate(analysis: Analysis): CourseInput {
   const hunks: CourseInput["hunks"] = {};
   for (const id of base.order) {
     const f = byId.get(id)!;
-    if (f.noise === "api") continue;
+    if (isGeneratedOutput(f)) continue;
     files[id] = { what: "", why: "" };
     for (const h of f.hunks) hunks[h.id] = "";
   }

@@ -48,15 +48,22 @@ export interface Layout {
 
 const GAP_X = 130;
 const GAP_STACK = 40;
+const GAP_SIDE = 70;
 const ROW_GAP = 170;
 const BAND_HEAD = 190;
 const BAND_FOOT = 120;
 const LABEL_MARGIN = 560;
 
+/** A file and the files riding with it: tests and generated output, in a column to its right. */
 interface Unit {
   ids: string[];
   w: number;
   h: number;
+  /** Width and height of the lead file; dependents start at `lead + GAP_SIDE`. */
+  lead: number;
+  leadH: number;
+  sideW: number;
+  sideH: number;
 }
 
 /**
@@ -65,7 +72,6 @@ interface Unit {
  * direction so the course snakes instead of jumping back to the left edge.
  */
 export function layoutMap(input: LayoutInput): Layout {
-  const maxRow = input.maxRowWidth ?? 3000;
   const size = (id: string): Size => input.sizes[id] ?? { w: 560, h: 300 };
 
   // Group into units, keeping course order.
@@ -77,15 +83,17 @@ export function layoutMap(input: LayoutInput): Layout {
     if (parentUnit) {
       const s = size(f.id);
       parentUnit.ids.push(f.id);
-      parentUnit.w = Math.max(parentUnit.w, s.w);
-      parentUnit.h += GAP_STACK + s.h;
+      parentUnit.sideH += (parentUnit.sideH ? GAP_STACK : 0) + s.h;
+      parentUnit.sideW = Math.max(parentUnit.sideW, s.w);
+      parentUnit.w = parentUnit.lead + GAP_SIDE + parentUnit.sideW;
+      parentUnit.h = Math.max(parentUnit.leadH, parentUnit.sideH);
       unitOf.set(f.id, parentUnit);
       continue;
     }
     const s = size(f.id);
     const layer: LayerId = f.float && previousLayer ? previousLayer : f.layer;
     previousLayer = layer;
-    const unit = { ids: [f.id], w: s.w, h: s.h, layer };
+    const unit = { ids: [f.id], w: s.w, h: s.h, lead: s.w, leadH: s.h, sideW: 0, sideH: 0, layer };
     units.push(unit);
     unitOf.set(f.id, unit);
   }
@@ -95,7 +103,12 @@ export function layoutMap(input: LayoutInput): Layout {
   const firstLayer = units[0]?.layer;
   const byLayer = new Map<LayerId, Unit[]>();
   for (const layer of LAYERS) byLayer.set(layer, []);
-  if (firstLayer) byLayer.get(firstLayer)!.push({ ids: [START], w: input.start.w, h: input.start.h });
+  if (firstLayer) byLayer.get(firstLayer)!.push({ ids: [START], w: input.start.w, h: input.start.h, lead: input.start.w, leadH: input.start.h, sideW: 0, sideH: 0 });
+
+  // Rows as wide as the map's area suggests, so the whole course fits a screen-shaped view
+  // instead of becoming a tall column on a big PR.
+  const area = units.reduce((n, u) => n + (u.w + GAP_X) * (u.h + ROW_GAP), 0);
+  const maxRow = input.maxRowWidth ?? Math.min(12000, Math.max(3000, Math.sqrt(area * 1.9)));
   for (const u of units) byLayer.get(u.layer)!.push(u);
 
   // Break each band into rows.
@@ -135,10 +148,11 @@ export function layoutMap(input: LayoutInput): Layout {
       let x = rtl ? right : 0;
       for (const u of row.units) {
         const ux = rtl ? x - u.w : x;
-        let uy = y;
-        for (const id of u.ids) {
-          pos[id] = { x: ux, y: uy };
-          uy += (id === START ? input.start.h : size(id).h) + GAP_STACK;
+        pos[u.ids[0]!] = { x: ux, y };
+        let sy = y;
+        for (const id of u.ids.slice(1)) {
+          pos[id] = { x: ux + u.lead + GAP_SIDE, y: sy };
+          sy += size(id).h + GAP_STACK;
         }
         if (!u.ids.includes(START)) last = { unit: u, x: ux, y, rtl };
         x = rtl ? ux - GAP_X : ux + u.w + GAP_X;

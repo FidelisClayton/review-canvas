@@ -48,11 +48,16 @@ function definitions(file: PrFile, hunk: Hunk): Def[] {
   const family = familyOf(file);
   if (!family || isTestPath(file.path)) return [];
   const out: Def[] = [];
-  // The hunk header's section names the enclosing class or function, often the only place the
-  // definition shows when a hunk adds a method to an existing class.
-  const texts = [hunk.section, ...hunk.lines.filter((l) => l.kind !== "del").map((l) => l.text)];
-  for (const text of texts) {
+  // Only what the PR adds counts as a definition: linking to an unchanged method says little.
+  // The hunk header still names the enclosing class, the one place a class shows when a hunk
+  // adds a method to it, so type names are read from there too.
+  const texts = [
+    { text: hunk.section, typesOnly: true },
+    ...hunk.lines.filter((l) => l.kind === "add").map((l) => ({ text: l.text, typesOnly: false })),
+  ];
+  for (const { text, typesOnly } of texts) {
     for (const [re, kind] of DEFS[family]) {
+      if (typesOnly && kind !== "type") continue;
       re.lastIndex = 0;
       for (const m of text.matchAll(re)) {
         const full = m[1]!;

@@ -1,12 +1,12 @@
 #!/usr/bin/env node
 import { spawn, execFileSync } from "node:child_process";
-import { mkdirSync, openSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, openSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { buildAnalysis, courseInputSchema, mergeCourse, type GhFile, type GhPull } from "@review-canvas/shared";
 import { buildApp } from "./app.js";
 import { courseTemplate, renderBrief } from "./brief.js";
 import { baseUrl, home, port, readConfig, reviewUrl, writeConfig } from "./config.js";
-import { fetchFiles, fetchHeads, fetchPull, GhError, parsePrRef } from "./github.js";
+import { fetchFileAt, fetchFiles, fetchHeads, fetchPull, GhError, parsePrRef } from "./github.js";
 import { loadAnalysis, reviewPath, saveAnalysis, saveReview } from "./store.js";
 
 const USAGE = `review-canvas: review a pull request on an infinite canvas
@@ -15,6 +15,8 @@ const USAGE = `review-canvas: review a pull request on an infinite canvas
                                           read, and the course JSON to fill in.
   review-canvas publish <id> [course.json] Check the course against the analysis, save it, make sure
                                           the server runs, and print the URL to open.
+  review-canvas show <id> <file-or-hunk-id> Print a whole file diff or hunk from the analysis.
+  review-canvas cat <id> <path>           Print a file as it is at the PR's head commit.
   review-canvas open <pr-url>             prepare + publish the default course in one step (no agent).
   review-canvas url <id>                  Print the URL of a review.
   review-canvas up                        Start the server in the background if it is not running.
@@ -34,7 +36,9 @@ async function prepare(input: string) {
   saveAnalysis(analysis);
   const coursePath = reviewPath(analysis.id, "course.json");
   const briefPath = reviewPath(analysis.id, "brief.md");
-  writeFileSync(coursePath, JSON.stringify(courseTemplate(analysis), null, 2) + "\n");
+  // The id includes the head commit, so an existing course was planned against this same code:
+  // keep the agent's work instead of resetting it to the template.
+  if (!existsSync(coursePath)) writeFileSync(coursePath, JSON.stringify(courseTemplate(analysis), null, 2) + "\n");
   writeFileSync(briefPath, renderBrief(analysis, coursePath));
   return { analysis, coursePath, briefPath };
 }
@@ -140,6 +144,26 @@ async function main(argv: string[]) {
       await up();
       for (const w of review.warnings) console.log(`warning: ${w}`);
       console.log(`Open: ${reviewUrl(analysis.id)}`);
+      return;
+    }
+    case "show": {
+      const [id, target] = args;
+      const analysis = id ? loadAnalysis(id) : null;
+      if (!analysis || !target) throw new Error("Usage: review-canvas show <id> <file-or-hunk-id>");
+      const file = analysis.files.find((f) => f.id === target || f.hunks.some((h) => h.id === target));
+      if (!file) throw new Error(`No file or hunk "${target}" in ${id}.`);
+      console.log(`${file.id} ${file.path}`);
+      for (const h of file.hunks.filter((h) => h.id === target || file.id === target)) {
+        console.log(`\n${h.id} ${h.range} ${h.section}`);
+        for (const l of h.lines) console.log((l.kind === "add" ? "+" : l.kind === "del" ? "-" : " ") + l.text);
+      }
+      return;
+    }
+    case "cat": {
+      const [id, path] = args;
+      const analysis = id ? loadAnalysis(id) : null;
+      if (!analysis || !path) throw new Error("Usage: review-canvas cat <id> <path>");
+      process.stdout.write(await fetchFileAt(analysis.pr, analysis.pr.headSha, path));
       return;
     }
     case "url":

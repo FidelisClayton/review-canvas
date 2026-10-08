@@ -25,23 +25,11 @@ notes on each file and hunk.
    server already found, and what is out of bounds. On large PRs, read it in chunks; skim the
    generated and test files.
 
-3. **Fill in the course** (`course.json`, pre-filled with every id and a default order). Edit:
-
-   - `route`: two or three sentences on how the course runs and why.
-   - `order`: every on-course file id in reading order. Follow how data and calls flow: schema
-     and models, domain, jobs, mail, the hand-written API contract (`.tsp`), routes, policies,
-     controllers, then the UI. Tests and generated files are moved next to their subject or
-     source automatically, so you do not need to place them carefully.
-   - `files.<id>.what`: one sentence on what changed. `files.<id>.why`: one short sentence on why
-     it comes at this point ("Start here: everything below reads these columns.").
-   - `hunks.<id>`: one sentence per hunk on what it does or what to check. Name risks plainly
-     ("Nothing checks the sync is failed before retrying it.").
-   - `links` (optional): extra relationships the server missed, as
-     `{ "from": "<hunk id>", "to": "<hunk id>", "label": "reads subject from", "symbol": "subject" }`.
-     The symbol must appear in both hunks or the server rejects the link. Never invent one.
-
-   Write plainly: no marketing words, no restating the diff line by line. Leave generated
-   files' notes empty.
+3. **Fill in the course** (`course.json`, pre-filled with a default order and a note slot for
+   every file and hunk that needs one). The brief's "Your job" section is the full rulebook:
+   reading order, what each note should say, which files may be left out of `order`, and the
+   evidence rule for extra `links`. Follow it. Its two commands, `review-canvas show` and
+   `review-canvas cat`, let you read past the diff without a checkout.
 
 4. **Publish:**
 

@@ -25,7 +25,26 @@ describe("normalizeOrder", () => {
   });
 });
 
+describe("normalizeOrder with dependents left out", () => {
+  it("seats tests and generated files beside their parent without a warning", () => {
+    const warnings: string[] = [];
+    const roots = defaultCourse(analysis).order.filter((x) => {
+      const f = analysis.files.find((g) => g.id === x)!;
+      return !f.subjectOf && !f.generatedFrom;
+    });
+    const order = normalizeOrder(analysis, roots, warnings);
+    expect(warnings).toEqual([]);
+    const model = order.indexOf(id("app/models/order_sync.rb"));
+    expect(order[model + 1]).toBe(id("order_sync_test.rb"));
+  });
+});
+
 describe("defaultCourse", () => {
+  it("puts migrations before the models that read them", () => {
+    const order = defaultCourse(analysis).order;
+    expect(order.indexOf(id("add_retry_fields_to_order_syncs.rb"))).toBeLessThan(order.indexOf(id("app/models/order_sync.rb")));
+  });
+
   it("runs top to bottom by layer", () => {
     const order = defaultCourse(analysis).order.map((x) => analysis.files.find((f) => f.id === x)!.layer);
     const firstFrontend = order.indexOf("frontend");

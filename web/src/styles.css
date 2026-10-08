@@ -328,3 +328,5 @@ body:has(.screen-msg){overflow:auto}
 @media (max-width:760px){
   .stage{min-height:0}
 }
+.tiny .node .tb .fname{visibility:hidden}
+.tiny .node{border-width:calc(2px * var(--inv))}

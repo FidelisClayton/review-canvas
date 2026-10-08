@@ -18,7 +18,7 @@ describe("layoutMap", () => {
     expect(l.pos.model!.y).toBeLessThan(l.pos.ui!.y);
   });
 
-  it("stacks a dependent beneath its parent in the same column", () => {
+  it("seats dependents in a column to the right of their parent", () => {
     const l = layoutMap({
       files: [
         { id: "model", layer: "data" },
@@ -28,8 +28,8 @@ describe("layoutMap", () => {
       start: { w: 380, h: 200 },
       oob: [],
     });
-    expect(l.pos.test!.x).toBe(l.pos.model!.x);
-    expect(l.pos.test!.y).toBe(l.pos.model!.y + 300 + 40);
+    expect(l.pos.test!.y).toBe(l.pos.model!.y);
+    expect(l.pos.test!.x).toBe(l.pos.model!.x + 500 + 70);
   });
 
   it("wraps long bands into rows that alternate direction", () => {

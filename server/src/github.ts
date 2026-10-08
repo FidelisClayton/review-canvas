@@ -70,6 +70,11 @@ export async function fetchHeads(ref: PrRef, sha: string, files: GhFile[]): Prom
 }
 
 
+/** A file's full text at a commit. */
+export function fetchFileAt(ref: PrRef, sha: string, path: string): Promise<string> {
+  return gh(["api", "-H", "Accept: application/vnd.github.raw", `repos/${ref.owner}/${ref.repo}/contents/${encodeURI(path)}?ref=${sha}`]);
+}
+
 /** Posts one review with all draft comments. Only ever called from an explicit confirm in the UI. */
 export async function submitReview(pr: PrMeta, event: Verdict, body: string, drafts: Draft[]): Promise<{ url: string }> {
   const payload = {

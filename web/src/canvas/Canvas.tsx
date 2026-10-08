@@ -7,6 +7,8 @@ import { Terrain } from "./Terrain";
 
 const START = "__start";
 const FAR_K = 0.46;
+/** Below this, name tags would overlap on a big PR; the numbered controls carry the course alone. */
+const TINY_K = 0.11;
 const reduceMotion = () => matchMedia("(prefers-reduced-motion: reduce)").matches;
 
 export interface CanvasHandle {
@@ -409,7 +411,7 @@ export const Canvas = forwardRef<CanvasHandle, CanvasProps>(function Canvas(prop
 
   return (
     <main
-      className={`viewport${far ? " far" : ""}${space ? " space" : ""}${panning ? " panning" : ""}`}
+      className={`viewport${far ? " far" : ""}${k < TINY_K ? " tiny" : ""}${space ? " space" : ""}${panning ? " panning" : ""}`}
       ref={vpRef}
       aria-label="Review map"
       onPointerDown={onPointerDown}

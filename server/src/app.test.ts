@@ -67,7 +67,7 @@ describe("brief", () => {
   });
 
   it("does not spend the agent's attention on generated diffs", () => {
-    expect(brief).toContain("Generated; no summary needed.");
+    expect(brief).toContain("Generated; no notes needed.");
     expect(brief).not.toContain("syncsRetry200.parse(data)");
   });
 });
