@@ -1,0 +1,4 @@
+#!/usr/bin/env sh
+# Runs the built CLI from this checkout. `npm run build` first.
+here="$(cd "$(dirname "$(readlink -f "$0")")" && pwd)"
+exec node "$here/../server/dist/cli.js" "$@"
