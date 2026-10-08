@@ -6,9 +6,9 @@ describe("layerOf", () => {
     ["db/migrate/2026_add_x.rb", "data"],
     ["app/models/case/timeline.rb", "data"],
     ["app/events/case/assigned.rb", "domain"],
-    ["lib/workos/client.rb", "domain"],
+    ["lib/billing/client.rb", "domain"],
     ["app/jobs/sync_job.rb", "jobs"],
-    ["lib/tasks/workos.rake", "jobs"],
+    ["lib/tasks/billing.rake", "jobs"],
     ["app/mailers/sync_mailer.rb", "mail"],
     ["app/views/sync_mailer/digest.html.erb", "mail"],
     ["config/routes.rb", "http"],
@@ -29,7 +29,7 @@ describe("subjectPathCandidates", () => {
   it("maps Minitest, RSpec and colocated JS tests to their subjects", () => {
     expect(subjectPathCandidates("test/models/case_test.rb")).toContain("app/models/case.rb");
     expect(subjectPathCandidates("spec/jobs/sync_job_spec.rb")).toContain("app/jobs/sync_job.rb");
-    expect(subjectPathCandidates("test/lib/workos/client_test.rb")).toContain("lib/workos/client.rb");
+    expect(subjectPathCandidates("test/lib/billing/client_test.rb")).toContain("lib/billing/client.rb");
     expect(subjectPathCandidates("app/frontend/ui/Badge.test.tsx")).toContain("app/frontend/ui/Badge.tsx");
   });
 });

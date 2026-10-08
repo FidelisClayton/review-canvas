@@ -29,7 +29,7 @@ describe("parsePatch", () => {
 describe("langOf", () => {
   it.each([
     ["app/models/case.rb", "rb"],
-    ["lib/tasks/workos.rake", "rb"],
+    ["lib/tasks/billing.rake", "rb"],
     ["app/views/a/b.html.erb", "erb"],
     ["app/frontend/App.tsx", "tsx"],
     ["typespec/cases.tsp", "tsp"],

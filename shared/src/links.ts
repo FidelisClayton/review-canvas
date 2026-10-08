@@ -84,8 +84,8 @@ const isRoutes = (path: string) => /^config\/routes/.test(path);
 const camel = (snake: string) => snake.replace(/(^|_)([a-z])/g, (_, __, c: string) => c.toUpperCase());
 
 /**
- * Rails routes name controllers indirectly: `resources :case_rotations`, `resource :profile`
- * (served by ProfilesController), `to: "case_rotations#update"`, `controller: "case_rotations"`.
+ * Rails routes name controllers indirectly: `resources :order_syncs`, `resource :profile`
+ * (served by ProfilesController), `to: "order_syncs#update"`, `controller: "order_syncs"`.
  */
 function routeRefs(text: string, plain: Set<string>, sent: Set<string>) {
   const controller = (name: string) => {
