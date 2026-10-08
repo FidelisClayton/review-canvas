@@ -15,6 +15,11 @@ export interface LayoutFile {
   layer: LayerId;
   /** Set when the file rides beneath another visible file (a test, or generated output). */
   parent?: string;
+  /**
+   * A file with no layer of its own (locales, config) sits in the band of the file before it in
+   * the course, so the route does not dive to a distant band and climb back.
+   */
+  float?: boolean;
 }
 
 export interface LayoutInput {
@@ -66,6 +71,7 @@ export function layoutMap(input: LayoutInput): Layout {
   // Group into units, keeping course order.
   const units: (Unit & { layer: LayerId })[] = [];
   const unitOf = new Map<string, Unit>();
+  let previousLayer: LayerId | null = null;
   for (const f of input.files) {
     const parentUnit = f.parent ? unitOf.get(f.parent) : undefined;
     if (parentUnit) {
@@ -77,7 +83,9 @@ export function layoutMap(input: LayoutInput): Layout {
       continue;
     }
     const s = size(f.id);
-    const unit = { ids: [f.id], w: s.w, h: s.h, layer: f.layer };
+    const layer: LayerId = f.float && previousLayer ? previousLayer : f.layer;
+    previousLayer = layer;
+    const unit = { ids: [f.id], w: s.w, h: s.h, layer };
     units.push(unit);
     unitOf.set(f.id, unit);
   }

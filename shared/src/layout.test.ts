@@ -43,6 +43,21 @@ describe("layoutMap", () => {
     expect(l.pos[second[0]!.id]!.x).toBeGreaterThan(l.pos[second.at(-1)!.id]!.x);
   });
 
+  it("seats a floating file in the band of the file before it", () => {
+    const l = layoutMap({
+      files: [
+        { id: "mailer", layer: "mail" },
+        { id: "locale", layer: "other", float: true },
+        { id: "ui", layer: "frontend" },
+      ],
+      sizes: { mailer: size, locale: size, ui: size },
+      start: { w: 380, h: 200 },
+      oob: [],
+    });
+    expect(l.bands.map((b) => b.layer)).toEqual(["mail", "frontend"]);
+    expect(l.pos.locale!.y).toBe(l.pos.mailer!.y);
+  });
+
   it("puts out-of-bounds files in their own zone to the right", () => {
     const l = layoutMap({ files: [{ id: "a", layer: "data" }], sizes: { a: size, lock: { w: 460, h: 80 } }, start: { w: 380, h: 200 }, oob: ["lock"] });
     expect(l.oobRect).not.toBeNull();

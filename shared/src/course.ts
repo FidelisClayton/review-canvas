@@ -3,7 +3,7 @@ import type { CourseInput } from "./schemas.js";
 import { LAYERS, type Analysis, type Course, type Link, type PrFile, type Review } from "./types.js";
 
 /** Files that can be on the course. Always-generated files are out of bounds for everyone. */
-export const onCourse = (f: PrFile) => f.noise !== "generated" && f.status !== "removed";
+export const onCourse = (f: PrFile) => f.noise !== "generated";
 
 /** The file a dependent rides with: a test with its subject, generated output with its source. */
 export const parentOf = (f: PrFile): string | undefined => f.subjectOf ?? f.generatedFrom;
@@ -34,7 +34,7 @@ export function normalizeOrder(analysis: Analysis, proposed: string[], warnings:
       continue;
     }
     if (!onCourse(f)) {
-      warnings.push(`order: ${f.path} is out of bounds (${f.noiseReason ?? f.status}) and was left off the course.`);
+      warnings.push(`order: ${f.path} is out of bounds (${f.noiseReason ?? "generated"}) and was left off the course.`);
       continue;
     }
     if (seen.has(id)) continue;

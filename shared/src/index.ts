@@ -6,3 +6,4 @@ export * from "./links.js";
 export * from "./analysis.js";
 export * from "./course.js";
 export * from "./layout.js";
+export * from "./view.js";

@@ -1,8 +1,8 @@
 #!/usr/bin/env node
 import { spawn, execFileSync } from "node:child_process";
-import { mkdirSync, openSync, readFileSync, writeFileSync } from "node:fs";
+import { mkdirSync, openSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import { buildAnalysis, courseInputSchema, mergeCourse } from "@review-canvas/shared";
+import { buildAnalysis, courseInputSchema, mergeCourse, type GhFile, type GhPull } from "@review-canvas/shared";
 import { buildApp } from "./app.js";
 import { courseTemplate, renderBrief } from "./brief.js";
 import { baseUrl, home, port, readConfig, reviewUrl, writeConfig } from "./config.js";
@@ -19,6 +19,8 @@ const USAGE = `review-canvas: review a pull request on an infinite canvas
   review-canvas url <id>                  Print the URL of a review.
   review-canvas up                        Start the server in the background if it is not running.
   review-canvas serve                     Run the server in the foreground.
+  review-canvas stop | restart            Stop (or stop and start) the background server.
+  review-canvas demo                      Load a synthetic PR with a planned course, to try the UI.
   review-canvas setup [--public-url URL]  Choose the URL reviews are opened at. With no URL, uses
                                           this machine's Tailscale name and runs \`tailscale serve\`.
 `;
@@ -58,6 +60,26 @@ async function up() {
     if (await healthy()) return;
   }
   throw new Error(`The server did not start. See ${home()}/server.log.`);
+}
+
+const pidFile = () => `${home()}/server.pid`;
+
+async function stop() {
+  let pid: number | null = null;
+  try {
+    pid = Number(readFileSync(pidFile(), "utf8"));
+  } catch {
+    /* no pid file: nothing we started is running */
+  }
+  if (pid) {
+    try {
+      process.kill(pid);
+    } catch {
+      /* already gone */
+    }
+    rmSync(pidFile(), { force: true });
+  }
+  for (let i = 0; i < 30 && (await healthy()); i++) await new Promise((r) => setTimeout(r, 100));
 }
 
 function publish(id: string, path?: string) {
@@ -109,6 +131,17 @@ async function main(argv: string[]) {
       console.log(`Open: ${reviewUrl(analysis.id)}`);
       return;
     }
+    case "demo": {
+      const root = new URL("../../test/fixtures/", import.meta.url);
+      const { pull, files } = JSON.parse(readFileSync(new URL("sync-retries.json", root), "utf8")) as { pull: GhPull; files: GhFile[] };
+      const analysis = buildAnalysis(pull, files, {});
+      saveAnalysis(analysis);
+      const review = publish(analysis.id, fileURLToPath(new URL("sync-retries.course.json", root)));
+      await up();
+      for (const w of review.warnings) console.log(`warning: ${w}`);
+      console.log(`Open: ${reviewUrl(analysis.id)}`);
+      return;
+    }
     case "url":
       if (!args[0]) throw new Error("Usage: review-canvas url <id>");
       console.log(reviewUrl(args[0]));
@@ -120,8 +153,19 @@ async function main(argv: string[]) {
     case "serve": {
       const app = await buildApp({ logger: true });
       await app.listen({ host: "127.0.0.1", port: port() });
+      mkdirSync(home(), { recursive: true });
+      writeFileSync(pidFile(), String(process.pid));
       return;
     }
+    case "stop":
+      await stop();
+      console.log("Stopped.");
+      return;
+    case "restart":
+      await stop();
+      await up();
+      console.log(`Running at ${baseUrl()}`);
+      return;
     case "setup": {
       const config = readConfig();
       const flag = args.indexOf("--public-url");
