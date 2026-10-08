@@ -1,0 +1,22 @@
+{
+  "name": "@review-canvas/server",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "bin": {
+    "review-canvas": "./dist/cli.js"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "dev": "tsx watch src/cli.ts serve"
+  },
+  "dependencies": {
+    "@fastify/static": "^10.1.5",
+    "@review-canvas/shared": "*",
+    "fastify": "^5.12.5",
+    "zod": "^4.6.5"
+  },
+  "devDependencies": {
+    "tsx": "^4.23.15"
+  }
+}
