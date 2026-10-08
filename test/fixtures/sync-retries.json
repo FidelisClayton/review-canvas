@@ -1,0 +1,197 @@
+{
+  "_note": "Synthetic pull request. Every file, line and person here is made up.",
+  "pull": {
+    "number": 4182,
+    "html_url": "https://github.com/acme/storefront/pull/4182",
+    "title": "Retry failed order syncs and email a daily failure digest",
+    "body": "Order syncs that hit a Shopify error used to sit in errored forever. This retries them with backoff, gives up after five attempts, emails shop owners a daily digest of what failed, and adds a Retry button in the admin.",
+    "user": {
+      "login": "mara-k"
+    },
+    "base": {
+      "ref": "main",
+      "repo": {
+        "name": "storefront",
+        "owner": {
+          "login": "acme"
+        }
+      }
+    },
+    "head": {
+      "ref": "mara/order-sync-retries",
+      "sha": "4182abcdef0123456789abcdef0123456789abcd"
+    },
+    "additions": 236,
+    "deletions": 18,
+    "changed_files": 24
+  },
+  "files": [
+    {
+      "filename": "db/migrate/20261006141200_add_retry_fields_to_order_syncs.rb",
+      "status": "added",
+      "additions": 9,
+      "deletions": 0,
+      "patch": "@@ -0,0 +1,9 @@\n+class AddRetryFieldsToOrderSyncs < ActiveRecord::Migration[7.2]\n+  def change\n+    add_column :order_syncs, :attempts, :integer, null: false, default: 0\n+    add_column :order_syncs, :last_error, :text\n+    add_column :order_syncs, :failed_at, :datetime\n+\n+    add_index :order_syncs, :failed_at, where: \"failed_at IS NOT NULL\"\n+  end\n+end"
+    },
+    {
+      "filename": "app/models/order_sync.rb",
+      "status": "modified",
+      "additions": 24,
+      "deletions": 3,
+      "patch": "@@ -3,9 +3,14 @@ class OrderSync < ApplicationRecord\n   belongs_to :shop\n   belongs_to :order\n \n-  enum :status, { pending: 0, synced: 1, errored: 2 }\n+  enum :status, { pending: 0, synced: 1, retrying: 2, failed: 3 }\n+\n+  MAX_ATTEMPTS = 5\n+\n+  scope :failed_since, ->(time) { failed.where(failed_at: time..) }\n \n   validates :order_id, uniqueness: { scope: :shop_id }\n@@ -24,8 +29,25 @@ class OrderSync < ApplicationRecord\n   def sync!\n     ShopifyClient.new(shop).push_order(order)\n-    update!(status: :synced)\n-  end\n+    update!(status: :synced, last_error: nil)\n+  end\n+\n+  def record_failure!(error)\n+    increment(:attempts)\n+    if attempts >= MAX_ATTEMPTS\n+      update!(status: :failed, failed_at: Time.current, last_error: error.message)\n+    else\n+      update!(status: :retrying, last_error: error.message)\n+    end\n+  end\n+\n+  def retry!\n+    update!(status: :pending, attempts: 0, failed_at: nil)\n+    OrderSyncJob.perform_later(id)\n+  end"
+    },
+    {
+      "filename": "test/models/order_sync_test.rb",
+      "status": "modified",
+      "additions": 14,
+      "deletions": 0,
+      "patch": "@@ -18,0 +18,14 @@ class OrderSyncTest < ActiveSupport::TestCase\n+  test \"marks the sync failed on the fifth attempt\" do\n+    sync = order_syncs(:pending)\n+    sync.update!(attempts: 4)\n+    sync.record_failure!(StandardError.new(\"timeout\"))\n+    assert sync.failed?\n+    assert_not_nil sync.failed_at\n+  end\n+\n+  test \"keeps retrying before the limit\" do\n+    sync = order_syncs(:pending)\n+    sync.update!(attempts: 1)\n+    sync.record_failure!(StandardError.new(\"timeout\"))\n+    assert sync.retrying?\n+  end"
+    },
+    {
+      "filename": "app/jobs/order_sync_job.rb",
+      "status": "modified",
+      "additions": 14,
+      "deletions": 3,
+      "patch": "@@ -1,9 +1,17 @@ class OrderSyncJob < ApplicationJob\n class OrderSyncJob < ApplicationJob\n   queue_as :shopify\n \n+  retry_on ShopifyClient::RateLimited, wait: :polynomially_longer, attempts: 3\n+\n   def perform(order_sync_id)\n     sync = OrderSync.find(order_sync_id)\n     sync.sync!\n   rescue ShopifyClient::Error => e\n-    sync.update!(status: :errored)\n-    Sentry.capture_exception(e)\n+    sync.record_failure!(e)\n+    if sync.retrying?\n+      self.class.set(wait: backoff(sync.attempts)).perform_later(sync.id)\n+    end\n+    Sentry.capture_exception(e) if sync.failed?\n   end\n@@ -10,0 +18,6 @@\n+\n+  private\n+\n+  def backoff(attempts)\n+    (2**attempts).minutes\n+  end"
+    },
+    {
+      "filename": "test/jobs/order_sync_job_test.rb",
+      "status": "modified",
+      "additions": 12,
+      "deletions": 0,
+      "patch": "@@ -22,0 +22,12 @@ class OrderSyncJobTest < ActiveJob::TestCase\n+  test \"re-enqueues with backoff while retrying\" do\n+    sync = order_syncs(:pending)\n+    sync.update!(attempts: 1)\n+    failing = Object.new\n+    def failing.push_order(*) = raise(ShopifyClient::Error, \"502\")\n+\n+    ShopifyClient.stub(:new, failing) do\n+      assert_enqueued_with(job: OrderSyncJob, args: [sync.id], at: 4.minutes.from_now) do\n+        OrderSyncJob.perform_now(sync.id)\n+      end\n+    end\n+  end"
+    },
+    {
+      "filename": "app/jobs/failure_digest_job.rb",
+      "status": "added",
+      "additions": 11,
+      "deletions": 0,
+      "patch": "@@ -0,0 +1,11 @@\n+class FailureDigestJob < ApplicationJob\n+  queue_as :mailers\n+\n+  def perform\n+    Shop.joins(:order_syncs).merge(OrderSync.failed_since(24.hours.ago)).distinct.find_each do |shop|\n+      syncs = shop.order_syncs.failed_since(24.hours.ago).includes(:order)\n+      SyncMailer.with(shop:, syncs: syncs.to_a).failure_digest.deliver_later\n+    end\n+  end\n+end"
+    },
+    {
+      "filename": "config/recurring.yml",
+      "status": "modified",
+      "additions": 4,
+      "deletions": 0,
+      "patch": "@@ -12,0 +12,4 @@ production:\n   cleanup_sessions:\n     class: SessionCleanupJob\n     schedule: every day at 3am\n+  failure_digest:\n+    class: FailureDigestJob\n+    schedule: every day at 7am"
+    },
+    {
+      "filename": "app/mailers/sync_mailer.rb",
+      "status": "modified",
+      "additions": 8,
+      "deletions": 0,
+      "patch": "@@ -1,3 +1,11 @@ class SyncMailer < ApplicationMailer\n class SyncMailer < ApplicationMailer\n+  def failure_digest\n+    @shop = params[:shop]\n+    @syncs = params[:syncs]\n+    mail(\n+      to: @shop.owner_email,\n+      subject: t(\".subject\", count: @syncs.size)\n+    )\n+  end\n end"
+    },
+    {
+      "filename": "app/views/sync_mailer/failure_digest.html.erb",
+      "status": "added",
+      "additions": 12,
+      "deletions": 0,
+      "patch": "@@ -0,0 +1,12 @@\n+<h1><%= @syncs.size %> orders didn't reach Shopify</h1>\n+<p>We tried each one 5 times. Retry them from the admin once the issue is fixed.</p>\n+\n+<table>\n+  <% @syncs.each do |sync| %>\n+    <tr>\n+      <td><%= sync.order.number %></td>\n+      <td><%= sync.last_error.truncate(80) %></td>\n+      <td><%= link_to \"Retry\", admin_sync_url(sync) %></td>\n+    </tr>\n+  <% end %>\n+</table>"
+    },
+    {
+      "filename": "config/locales/en.yml",
+      "status": "modified",
+      "additions": 6,
+      "deletions": 0,
+      "patch": "@@ -48,4 +48,10 @@ en:\n   sync_mailer:\n+    failure_digest:\n+      subject:\n+        one: \"1 order failed to sync to Shopify\"\n+        other: \"%{count} orders failed to sync to Shopify\"\n   admin:\n     syncs:\n+      retry:\n+        notice: \"Retry queued\""
+    },
+    {
+      "filename": "typespec/admin-syncs.tsp",
+      "status": "modified",
+      "additions": 9,
+      "deletions": 1,
+      "patch": "@@ -18,6 +18,14 @@ namespace AdminApi.Syncs;\n @route(\"/admin/syncs/{id}\")\n op show(@path id: string): OrderSync;\n+\n+@route(\"/admin/syncs/{id}/retry\")\n+@post op retry(@path id: string): OrderSync | NotFoundError | ForbiddenError;\n \n model OrderSync {\n   id: string;\n-  status: \"pending\" | \"synced\" | \"errored\";\n+  status: \"pending\" | \"synced\" | \"retrying\" | \"failed\";\n+  attempts: int32;\n+  lastError?: string;\n+  failedAt?: utcDateTime;\n }"
+    },
+    {
+      "filename": "typespec/openapi/AdminApi.openapi.yaml",
+      "status": "modified",
+      "additions": 16,
+      "deletions": 0,
+      "patch": "@@ -212,3 +212,19 @@ paths:\n   /admin/syncs/{id}:\n     get:\n       operationId: Syncs_show\n+  /admin/syncs/{id}/retry:\n+    post:\n+      operationId: Syncs_retry\n+      parameters:\n+        - name: id\n+          in: path\n+          required: true\n+          schema:\n+            type: string\n+      responses:\n+        \"200\":\n+          content:\n+            application/json:\n+              schema:\n+                $ref: \"#/components/schemas/OrderSync\""
+    },
+    {
+      "filename": "app/frontend/clients/admin-api/adminApi.ts",
+      "status": "modified",
+      "additions": 12,
+      "deletions": 0,
+      "patch": "@@ -88,0 +88,12 @@\n+export const getSyncsRetryUrl = (id: string) => `/admin/syncs/${id}/retry`\n+\n+export const syncsRetry = async (id: string, options?: RequestInit): Promise<OrderSync> => {\n+  const res = await fetch(getSyncsRetryUrl(id), { ...options, method: \"POST\" })\n+  const body = [204, 205, 304].includes(res.status) ? null : await res.text()\n+  const data: OrderSync = body ? JSON.parse(body) : {}\n+  return syncsRetry200.parse(data)\n+}"
+    },
+    {
+      "filename": "app/frontend/clients/admin-api/schemas/orderSync.zod.ts",
+      "status": "modified",
+      "additions": 4,
+      "deletions": 1,
+      "patch": "@@ -1,12 +1,15 @@\n /**\n  * Generated by orval 🍺\n  * Do not edit manually.\n  */\n import { z } from \"zod\"\n \n export const orderSync = z.strictObject({\n   id: z.string(),\n-  status: z.enum([\"pending\", \"synced\", \"errored\"]),\n+  status: z.enum([\"pending\", \"synced\", \"retrying\", \"failed\"]),\n+  attempts: z.number().int(),\n+  lastError: z.string().optional(),\n+  failedAt: z.iso.datetime({}).optional(),\n })"
+    },
+    {
+      "filename": "app/frontend/clients/admin-api/schemas/syncsRetry200.zod.ts",
+      "status": "added",
+      "additions": 9,
+      "deletions": 0,
+      "patch": "@@ -0,0 +1,9 @@\n+/**\n+ * Generated by orval 🍺\n+ * Do not edit manually.\n+ */\n+import { z } from \"zod\"\n+import { orderSync } from \"./orderSync.zod\"\n+\n+export const syncsRetry200 = orderSync\n+export type SyncsRetry200 = z.infer<typeof syncsRetry200>"
+    },
+    {
+      "filename": "config/routes.rb",
+      "status": "modified",
+      "additions": 3,
+      "deletions": 1,
+      "patch": "@@ -41,5 +41,7 @@ Rails.application.routes.draw do\n   namespace :admin do\n-    resources :syncs, only: [:index, :show]\n+    resources :syncs, only: [:index, :show] do\n+      post :retry, on: :member\n+    end\n   end"
+    },
+    {
+      "filename": "app/policies/sync_policy.rb",
+      "status": "modified",
+      "additions": 4,
+      "deletions": 0,
+      "patch": "@@ -6,4 +6,8 @@ class SyncPolicy < ApplicationPolicy\n   def show?\n     user.admin? || record.shop.staff?(user)\n   end\n+\n+  def retry?\n+    user.admin? || record.shop.owner == user\n+  end"
+    },
+    {
+      "filename": "app/controllers/admin/syncs_controller.rb",
+      "status": "modified",
+      "additions": 11,
+      "deletions": 0,
+      "patch": "@@ -18,0 +18,11 @@ class Admin::SyncsController < Admin::BaseController\n+  def retry\n+    @sync = OrderSync.find(params[:id])\n+    authorize @sync, :retry?\n+    @sync.retry!\n+\n+    respond_to do |format|\n+      format.json { render json: SyncSerializer.new(@sync) }\n+      format.html { redirect_to admin_sync_path(@sync), notice: t(\".notice\") }\n+    end\n+  end"
+    },
+    {
+      "filename": "app/javascript/stores/syncStore.ts",
+      "status": "modified",
+      "additions": 15,
+      "deletions": 1,
+      "patch": "@@ -4,1 +4,1 @@\n-export type SyncStatus = \"pending\" | \"synced\" | \"errored\"\n+export type SyncStatus = \"pending\" | \"synced\" | \"retrying\" | \"failed\"\n@@ -19,3 +19,14 @@ export const useSyncStore\n export const useSyncStore = create<SyncState>((set) => ({\n   syncs: {},\n+  retrying: new Set<string>(),\n+\n+  retrySync: async (id: string) => {\n+    set((s) => ({ retrying: new Set(s.retrying).add(id) }))\n+    const sync = await syncsRetry(id)\n+    set((s) => {\n+      const retrying = new Set(s.retrying)\n+      retrying.delete(id)\n+      return { syncs: { ...s.syncs, [id]: sync }, retrying }\n+    })\n+  },"
+    },
+    {
+      "filename": "app/javascript/components/SyncStatusBadge.tsx",
+      "status": "modified",
+      "additions": 10,
+      "deletions": 2,
+      "patch": "@@ -8,9 +8,16 @@ export function SyncStatusBadge({ sync })\n-  const tone = sync.status === \"errored\" ? \"danger\" : \"neutral\"\n+  const tone = TONES[sync.status]\n+  const isRetrying = useSyncStore((s) => s.retrying.has(sync.id))\n+  const retrySync = useSyncStore((s) => s.retrySync)\n \n   return (\n     <Badge tone={tone}>\n       {LABELS[sync.status]}\n+      {sync.status === \"failed\" && (\n+        <Button size=\"xs\" loading={isRetrying} onClick={() => retrySync(sync.id)}>\n+          {t(\"syncStatus.retry\")}\n+        </Button>\n+      )}\n     </Badge>"
+    },
+    {
+      "filename": "app/javascript/locales/en.json",
+      "status": "modified",
+      "additions": 3,
+      "deletions": 1,
+      "patch": "@@ -12,5 +12,7 @@\n   \"syncStatus\": {\n     \"pending\": \"Waiting\",\n     \"synced\": \"Synced\",\n-    \"errored\": \"Error\"\n+    \"retrying\": \"Retrying\",\n+    \"failed\": \"Failed\",\n+    \"retry\": \"Retry\"\n   },"
+    },
+    {
+      "filename": "db/schema.rb",
+      "status": "modified",
+      "additions": 5,
+      "deletions": 1,
+      "patch": "@@ -1,2 +1,2 @@\n-generated: old\n+generated: new"
+    },
+    {
+      "filename": "app/javascript/components/__snapshots__/SyncStatusBadge.test.tsx.snap",
+      "status": "modified",
+      "additions": 21,
+      "deletions": 4,
+      "patch": "@@ -1,2 +1,2 @@\n-generated: old\n+generated: new"
+    },
+    {
+      "filename": "yarn.lock",
+      "status": "modified",
+      "additions": 0,
+      "deletions": 0
+    }
+  ]
+}
