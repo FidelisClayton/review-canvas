@@ -1,0 +1,3 @@
+/* Space+drag pan: the scroller shows a grab cursor while Space is held. */
+.viewport[data-pan="ready"],.viewport[data-pan="ready"] *{cursor:grab!important}
+.viewport[data-pan="drag"],.viewport[data-pan="drag"] *{cursor:grabbing!important;user-select:none}
