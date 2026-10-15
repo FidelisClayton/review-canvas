@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { LAYERS, LAYER_INFO, onCourse, type LayerId, type PrFile, type Stop } from "@review-canvas/shared";
 import { useCourse } from "./ctx";
 import { base, dir } from "./model";
@@ -11,6 +11,11 @@ export interface MapViewProps {
   focusOob: boolean;
   /** A goal badge was clicked: open that goal in the Guided view at that chunk. */
   onGoalBadge: (goalId: string, hunkId: string) => void;
+  /** A frame was clicked while zoomed out: zoom back in on it. */
+  onFarClick: (frame: HTMLElement) => void;
+  far: boolean;
+  /** "Go to draft" asked for this chunk's diff to be shown; `n` changes on every ask. */
+  reveal: { hunkId: string; n: number } | null;
 }
 
 const Delta = ({ f }: { f: PrFile }) => (
@@ -20,7 +25,7 @@ const Delta = ({ f }: { f: PrFile }) => (
   </span>
 );
 
-export function MapView({ focusOob, onGoalBadge }: MapViewProps) {
+export function MapView({ focusOob, onGoalBadge, onFarClick, far, reveal }: MapViewProps) {
   const c = useCourse();
   const bandRef = useRef<HTMLElement>(null);
   // Files whose diff is shown. A file with a draft starts open, so "Go to draft" finds its line.
@@ -31,6 +36,13 @@ export function MapView({ focusOob, onGoalBadge }: MapViewProps) {
       if (!next.delete(id)) next.add(id);
       return next;
     });
+
+  // Layout effect: the chunk must be in the DOM before ReviewScreen's scroll frame looks for it.
+  useLayoutEffect(() => {
+    const id = reveal && c.view.hunkFile.get(reveal.hunkId)?.id;
+    if (id) setShown((s) => (s.has(id) ? s : new Set(s).add(id)));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [reveal]);
 
   useEffect(() => {
     if (!focusOob) return;
@@ -70,7 +82,13 @@ export function MapView({ focusOob, onGoalBadge }: MapViewProps) {
   }
 
   return (
-    <div className="map">
+    <div
+      className="map"
+      onClick={(e) => {
+        const node = (e.target as HTMLElement).closest<HTMLElement>(".node");
+        if (far && node) onFarClick(node);
+      }}
+    >
       {LAYERS.filter((l) => byBand[l].length).map((l) => (
         <section className="band" data-layer={l} key={l}>
           <div className="bandlab">

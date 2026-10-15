@@ -85,7 +85,7 @@ export function GoalSheet({ open, idx, view, state, guided, g, s, onGoal, onStop
                       goal.stops.length ? `${goal.stops.length} chunk${goal.stops.length === 1 ? "" : "s"} nobody asked for · ${read}/${goal.stops.length} read` : "No changes outside the goals"
                     ) : (
                       <>
-                        <span className="src">{goal.src}</span> · {goal.stops.length - tests} code · {tests} tests · {read}/{goal.stops.length} read
+                        <span className="src">{goal.src}</span> · {goal.stops.length - tests} code · {tests} test{tests === 1 ? "" : "s"} · {read}/{goal.stops.length} read
                         {goal.gap && (
                           <>
                             {" · "}

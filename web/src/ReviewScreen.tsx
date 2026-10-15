@@ -68,6 +68,7 @@ function LoadedReview({ review, initial }: { review: Review; initial: ReviewStat
   const [reviewOpen, setReviewOpen] = useState(false);
   const [courseOpen, setCourseOpen] = useState(false);
   const [focusOob, setFocusOob] = useState(false);
+  const [reveal, setReveal] = useState<{ hunkId: string; n: number } | null>(null);
   const [toast, setToast] = useState<string | null>(null);
   const toastTimer = useRef(0);
   const say = useCallback((text: string) => {
@@ -79,6 +80,10 @@ function LoadedReview({ review, initial }: { review: Review; initial: ReviewStat
   const vpRef = useRef<HTMLDivElement>(null);
   const worldRef = useRef<HTMLDivElement>(null);
   const zoom = useZoom(vpRef, worldRef);
+
+  // Guided and Map start at reading size.
+  const { setZoom } = zoom;
+  useEffect(() => setZoom(1), [mode, setZoom]);
 
   // Save after every change, debounced. `submitted` is server-owned and never sent.
   const first = useRef(true);
@@ -95,18 +100,26 @@ function LoadedReview({ review, initial }: { review: Review; initial: ReviewStat
   live.current = { state, g, s, mode, composer, drawer, reviewOpen, far: zoom.far, zoom: zoom.zoom };
 
   // ---- scrolling: exact offsets, because scrollIntoView lands short while a smooth scroll runs ----
-  const [scrollReq, setScrollReq] = useState<{ n: number; smooth: boolean; hunkId?: string } | null>(null);
-  const requestScroll = useCallback((smooth: boolean, hunkId?: string) => setScrollReq((r) => ({ n: (r?.n ?? 0) + 1, smooth, ...(hunkId ? { hunkId } : {}) })), []);
+  const [scrollReq, setScrollReq] = useState<{ n: number; smooth: boolean; hunkId?: string; lineIndex?: number } | null>(null);
+  const requestScroll = useCallback((smooth: boolean, hunkId?: string, lineIndex?: number) =>
+      setScrollReq((r) => ({ n: (r?.n ?? 0) + 1, smooth, ...(hunkId ? { hunkId } : {}), ...(lineIndex !== undefined ? { lineIndex } : {}) })),
+    [],
+  );
   useEffect(() => {
     if (!scrollReq) return;
     const frame = requestAnimationFrame(() => {
       const vp = vpRef.current;
       const world = worldRef.current;
       if (!vp || !world) return;
-      const { g, s, mode, zoom: z } = live.current;
+      const { g, s, mode } = live.current;
+      // Read the zoom off the element: a view switch resets it in the same tick, before state catches up.
+      const z = Number(world.style.zoom) || 1;
       const behavior = scrollReq.smooth ? "smooth" : "auto";
       let target: HTMLElement | null = null;
-      if (scrollReq.hunkId) target = world.querySelector<HTMLElement>(`.stop[data-hunk="${scrollReq.hunkId}"]`);
+      if (scrollReq.hunkId)
+        target =
+          (scrollReq.lineIndex !== undefined && world.querySelector<HTMLElement>(`.ln[data-h="${scrollReq.hunkId}"][data-i="${scrollReq.lineIndex}"]`)) ||
+          world.querySelector<HTMLElement>(`.stop[data-hunk="${scrollReq.hunkId}"]`);
       else if (mode === "guided" && g >= 0) {
         const st = world.querySelector<HTMLElement>(`.stop[data-si="${s}"]`);
         const node = st?.closest<HTMLElement>(".node");
@@ -285,10 +298,11 @@ function LoadedReview({ review, initial }: { review: Review; initial: ReviewStat
       closeComposer: () => setComposer(null),
       addDraft,
       deleteDraft: (id) => setState((st) => ({ ...st, drafts: st.drafts.filter((d) => d.id !== id) })),
+      drawerHunk: drawer?.kind === "chunk" ? drawer.hunkId : null,
       openChunk: (hunkId, symbols) => setDrawer((d) => (d?.kind === "chunk" && d.hunkId === hunkId ? null : { kind: "chunk", hunkId, symbols })),
       openFile: (fileId) => setDrawer((d) => (d?.kind === "file" && d.fileId === fileId ? null : { kind: "file", fileId })),
     }),
-    [review, view, idx, state, composer, addDraft],
+    [review, view, idx, state, composer, addDraft, drawer],
   );
 
   const goDraft = (hunkId: string, lineIndex: number) => {
@@ -301,7 +315,8 @@ function LoadedReview({ review, initial }: { review: Review; initial: ReviewStat
       requestScroll(false);
     } else {
       setMode("map");
-      requestScroll(false, hunkId);
+      setReveal((r) => ({ hunkId, n: (r?.n ?? 0) + 1 }));
+      requestScroll(false, hunkId, lineIndex);
     }
   };
 
@@ -362,7 +377,7 @@ function LoadedReview({ review, initial }: { review: Review; initial: ReviewStat
           >
             <div className={`world${zoom.far ? " far" : ""}`} ref={worldRef}>
               {mode === "map" ? (
-                <MapView focusOob={focusOob} onGoalBadge={goToGoalId} />
+                <MapView focusOob={focusOob} onGoalBadge={goToGoalId} far={zoom.far} onFarClick={zoom.zoomToElement} reveal={reveal} />
               ) : (
                 <CoursePage
                   worldRef={worldRef}

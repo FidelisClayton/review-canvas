@@ -11,8 +11,9 @@ export interface LinkGroupsProps {
 }
 
 function Chip({ e, onOpen }: { e: LinkEntry; onOpen: (e: LinkEntry) => void }) {
+  const { drawerHunk } = useCourse();
   return (
-    <button className="chip" title="Open in the side drawer" onClick={() => onOpen(e)}>
+    <button className="chip" title="Open in the side drawer" aria-pressed={drawerHunk === e.hunkId} onClick={() => onOpen(e)}>
       <b>{base(e.path)}</b>
       {e.symbol && <span>{e.symbol}</span>}
     </button>

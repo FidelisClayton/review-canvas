@@ -31,13 +31,10 @@ describe("buildView", () => {
     expect([...oob.keys()].some((p) => p.endsWith("config/locales/en.yml"))).toBe(false);
   });
 
-  it("drops links that touch an out-of-bounds chunk", () => {
+  it("keeps links that touch an out-of-bounds chunk", () => {
     const ids = new Set(view.oob.map((o) => o.fileId));
-    for (const l of view.links) {
-      expect(ids.has(view.hunkFile.get(l.from)!.id)).toBe(false);
-      expect(ids.has(view.hunkFile.get(l.to)!.id)).toBe(false);
-    }
-    expect(view.links.length).toBeGreaterThan(0);
+    expect(view.links.some((l) => ids.has(view.hunkFile.get(l.from)!.id) || ids.has(view.hunkFile.get(l.to)!.id))).toBe(true);
+    expect(view.links.length).toBe(analysis.links.length);
   });
 
   it("indexes a review with no goals", () => {

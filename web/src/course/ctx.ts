@@ -20,6 +20,8 @@ export interface CourseCtx {
   closeComposer: () => void;
   addDraft: (hunkId: string, lineIndex: number, body: string) => void;
   deleteDraft: (id: string) => void;
+  /** The chunk open in the chunk drawer, if any. */
+  drawerHunk: string | null;
   /** Open a linked chunk in the side drawer; `symbols` are highlighted in it. */
   openChunk: (hunkId: string, symbols: string[]) => void;
   openFile: (fileId: string) => void;

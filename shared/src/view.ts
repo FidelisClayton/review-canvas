@@ -20,7 +20,7 @@ export interface ReviewView {
   goalsOfFile: Map<string, number[]>;
   /** Out-of-bounds files: viewable, never stops, never counted as read. */
   oob: OobItem[];
-  /** Static and agent links between on-course chunks. */
+  /** Static and agent links between chunks, out-of-bounds ones included. */
   links: Link[];
 }
 
@@ -60,11 +60,8 @@ export function buildView(review: Review): ReviewView {
       reason: f.noiseReason ?? "Generated.",
     }));
 
-  const links = [...review.analysis.links, ...review.agentLinks].filter((l) => {
-    const a = hunkFile.get(l.from);
-    const b = hunkFile.get(l.to);
-    return a && b && onCourse(a) && onCourse(b);
-  });
+  // Links are validated when made. An end in an out-of-bounds file stays: the drawer opens it, marked.
+  const links = [...review.analysis.links, ...review.agentLinks].filter((l) => hunkFile.has(l.from) && hunkFile.has(l.to));
 
   return { files, hunkFile, goalsOfHunk, goalsOfFile, oob, links };
 }

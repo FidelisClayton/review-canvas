@@ -1,7 +1,7 @@
 import { LAYERS, LAYER_INFO, type LayerId, type PrFile } from "@review-canvas/shared";
 import type { ReactNode, RefObject } from "react";
 import { useCourse } from "./ctx";
-import { base, dir, framesOf, goalLabel, type CourseGoal, type Frame } from "./model";
+import { base, dir, framesOf, goalLabel, UNCLAIMED_TITLE, type CourseGoal, type Frame } from "./model";
 import { RouteLayer } from "./RouteLayer";
 import { StopView } from "./StopView";
 
@@ -116,7 +116,7 @@ function FileFrame({ frame, fi, goal, g, stop, onStop, onGoalBadge }: { frame: F
         return (
           <button key={h.id} className="fold" data-goto={gs[0] ?? ""} disabled={!gs.length} onClick={() => gs.length && onGoalBadge(c.idx.goals[gs[0]!]!.id, h.id)}>
             <code>{h.range}</code>
-            <span>{gs.length ? `goal ${gs.map((x) => goalLabel(c.idx.goals[x]!, x)).join(", ")}` : "not on this course"}</span>
+            <span>{gs.length ? (gs.every((x) => c.idx.goals[x]!.unclaimed) ? UNCLAIMED_TITLE : `goal ${gs.map((x) => goalLabel(c.idx.goals[x]!, x)).join(", ")}`) : "not on this course"}</span>
           </button>
         );
       })}

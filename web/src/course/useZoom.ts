@@ -51,6 +51,8 @@ export function useZoom(scrollerRef: RefObject<HTMLElement | null>, worldRef: Re
       const box = { x: (r.left - v.left + vp.scrollLeft) / from, y: (r.top - v.top + vp.scrollTop) / from, w: r.width / from };
       setZoom(1);
       vp.scrollTo({ left: Math.max(0, box.x + box.w / 2 - vp.clientWidth / 2), top: Math.max(0, box.y - 24) });
+      // An animation, not a class: React rewrites className when the frame becomes the current one.
+      el.animate([{ outline: "3px solid var(--ink)", outlineOffset: "3px" }, { outline: "3px solid transparent", outlineOffset: "3px" }], { duration: 1200, easing: "ease-out" });
     },
     [scrollerRef, setZoom],
   );
