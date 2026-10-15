@@ -1,4 +1,10 @@
-/** Stub for U7: "Show 20 more lines above/below" for the chunk range a stop shows. */
+import { useState } from "react";
+import { highlight } from "../highlight";
+import { useCourse } from "./ctx";
+import { around, headRowsOf } from "./headRows";
+import { useHeadFile } from "./useHeadFile";
+import "./file.css";
+
 export interface ShowMoreProps {
   fileId: string;
   hunkId: string;
@@ -8,6 +14,42 @@ export interface ShowMoreProps {
   dir: "up" | "down";
 }
 
-export function ShowMore(_props: ShowMoreProps) {
-  return null;
+const STEP = 20;
+
+/** "Show 20 more lines above/below" a stop, from the file at the PR head. Nothing until the file has loaded. */
+export function ShowMore({ fileId, hunkId, from, to, dir }: ShowMoreProps) {
+  const c = useCourse();
+  const head = useHeadFile(fileId);
+  const [count, setCount] = useState(0);
+  const file = c.view.hunkFile.get(hunkId);
+  if (head.status !== "ready" || !head.lines || !file) return null;
+  const rows = headRowsOf(file, head.lines);
+  const at = around(rows, hunkId, from, to);
+  if (!at) return null;
+  // Added and deleted rows keep their kind when the reader expands into another chunk; none of these rows take a comment.
+  const shown = dir === "up" ? rows.slice(Math.max(0, at.first - count), at.first) : rows.slice(at.last + 1, at.last + 1 + count);
+  const more = dir === "up" ? at.first - count > 0 : at.last + count < rows.length - 1;
+  const lines = shown.map((r, i) => (
+    <div key={i} className={`ln ${r.kind}`}>
+      <span className="no">{r.no}</span>
+      <span className="sg">{r.kind === "add" ? "+" : r.kind === "del" ? "−" : " "}</span>
+      <span className="tx" dangerouslySetInnerHTML={{ __html: highlight(r.text, file.lang) || " " }} />
+    </div>
+  ));
+  const button = more && (
+    <button className="more" onClick={() => setCount((n) => n + STEP)}>
+      Show {STEP} more lines {dir === "up" ? "above" : "below"}
+    </button>
+  );
+  return dir === "up" ? (
+    <>
+      {button}
+      {lines}
+    </>
+  ) : (
+    <>
+      {lines}
+      {button}
+    </>
+  );
 }

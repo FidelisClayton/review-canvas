@@ -34,3 +34,17 @@ export function submitReview(id: string, event: Verdict, body: string) {
     body: JSON.stringify({ event, body }),
   }).then((r) => json<{ url: string; submitted: NonNullable<ReviewState["submitted"]> }>(r));
 }
+
+export type HeadFileResult = { status: "ready"; lines: string[] } | { status: "removed" | "error"; message: string };
+
+/** The file at the PR head. A 404 means the file is gone or not in the review; anything else that fails is an error to retry. */
+export async function fetchHeadFile(reviewId: string, fileId: string): Promise<HeadFileResult> {
+  try {
+    const res = await fetch(`/api/reviews/${encodeURIComponent(reviewId)}/files/${encodeURIComponent(fileId)}`);
+    const body = (await res.json().catch(() => ({}))) as { lines?: string[]; error?: string };
+    if (res.ok && body.lines) return { status: "ready", lines: body.lines };
+    return { status: res.status === 404 ? "removed" : "error", message: body.error ?? `Request failed (${res.status}).` };
+  } catch (e) {
+    return { status: "error", message: e instanceof Error ? e.message : "Could not reach the server." };
+  }
+}
