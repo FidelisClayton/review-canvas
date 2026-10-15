@@ -13,8 +13,8 @@
 - `server/`: Fastify app (`app.ts`), CLI (`cli.ts`), `gh` wrapper (`github.ts`), file store
   (`store.ts`), agent brief (`brief.ts`).
 - `web/`: React app.
-  - `ReviewScreen.tsx`: review state, keys, view switch (Guided / Map).
-  - `course/`: the page. Course sheet, Guided view, Map view, `StopView.tsx` (code rows), chunk
+  - `ReviewScreen.tsx`: review state, keys, view switch (Guided / Map) and Guided layout (Canvas / Diff).
+  - `course/`: the page. Course sheet, Guided view, `DiffColumn.tsx` (the Diff layout), Map view, `StopView.tsx` (code rows), chunk
     and file drawers, link groups, Show more, zoom and pan, the read tracker.
   - `panels.tsx`: review drawer and legend.
 - `skills/review-canvas/SKILL.md`: the skill agents follow. Keep it in step with the brief and

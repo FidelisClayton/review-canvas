@@ -3,6 +3,7 @@ import { buildView, type Draft, type Review, type ReviewState, type Verdict } fr
 import { fetchReview, saveState, submitReview } from "./api";
 import { ChunkDrawer } from "./course/ChunkDrawer";
 import { CoursePage } from "./course/CoursePage";
+import { DiffColumn } from "./course/DiffColumn";
 import { CourseContext, type ComposerState, type CourseCtx } from "./course/ctx";
 import { FileDrawer } from "./course/FileDrawer";
 import { GoalBar } from "./course/GoalBar";
@@ -17,6 +18,8 @@ import { useZoom } from "./course/useZoom";
 import { ReviewDrawer, TopBar } from "./panels";
 
 type Mode = "guided" | "map";
+type Layout = "canvas" | "diff";
+const LAYOUT_KEY = "review-canvas:layout";
 type DrawerTarget = { kind: "chunk"; hunkId: string; symbols: string[] } | { kind: "file"; fileId: string };
 
 export function ReviewScreen({ id }: { id: string }) {
@@ -62,6 +65,7 @@ function LoadedReview({ review, initial }: { review: Review; initial: ReviewStat
     return hasGoals && begun ? next : -1;
   });
   const [s, setS] = useState(0);
+  const [layout, setLayout] = useState<Layout>(() => (localStorage.getItem(LAYOUT_KEY) === "diff" ? "diff" : "canvas"));
   const [focusing, setFocusing] = useState(false);
   const [drawer, setDrawer] = useState<DrawerTarget | null>(null);
   const [composer, setComposer] = useState<ComposerState | null>(null);
@@ -79,11 +83,11 @@ function LoadedReview({ review, initial }: { review: Review; initial: ReviewStat
 
   const vpRef = useRef<HTMLDivElement>(null);
   const worldRef = useRef<HTMLDivElement>(null);
-  const zoom = useZoom(vpRef, worldRef);
+  const zoom = useZoom(vpRef, worldRef, layout === "canvas" || mode === "map");
 
   // Guided and Map start at reading size.
   const { setZoom } = zoom;
-  useEffect(() => setZoom(1), [mode, setZoom]);
+  useEffect(() => setZoom(1), [mode, layout, setZoom]);
 
   // Save after every change, debounced. `submitted` is server-owned and never sent.
   const first = useRef(true);
@@ -96,8 +100,8 @@ function LoadedReview({ review, initial }: { review: Review; initial: ReviewStat
     return () => clearTimeout(t);
   }, [state, review.analysis.id, say]);
 
-  const live = useRef({ state, g, s, mode, composer, drawer, reviewOpen, far: zoom.far, zoom: zoom.zoom });
-  live.current = { state, g, s, mode, composer, drawer, reviewOpen, far: zoom.far, zoom: zoom.zoom };
+  const live = useRef({ state, g, s, mode, layout, composer, drawer, reviewOpen, far: zoom.far, zoom: zoom.zoom });
+  live.current = { state, g, s, mode, layout, composer, drawer, reviewOpen, far: zoom.far, zoom: zoom.zoom };
 
   // ---- scrolling: exact offsets, because scrollIntoView lands short while a smooth scroll runs ----
   const [scrollReq, setScrollReq] = useState<{ n: number; smooth: boolean; hunkId?: string; lineIndex?: number } | null>(null);
@@ -111,7 +115,7 @@ function LoadedReview({ review, initial }: { review: Review; initial: ReviewStat
       const vp = vpRef.current;
       const world = worldRef.current;
       if (!vp || !world) return;
-      const { g, s, mode } = live.current;
+      const { g, s, mode, layout } = live.current;
       // Read the zoom off the element: a view switch resets it in the same tick, before state catches up.
       const z = Number(world.style.zoom) || 1;
       const behavior = scrollReq.smooth ? "smooth" : "auto";
@@ -128,6 +132,11 @@ function LoadedReview({ review, initial }: { review: Review; initial: ReviewStat
       }
       if (!target) return void vp.scrollTo({ top: 0, left: 0, behavior });
       const p = posIn(target, world);
+      if (layout === "diff" && mode === "guided") {
+        // A file's first stop puts its header at the top; later stops sit just below the sticky header.
+        const head = target.classList.contains("node") ? 0 : target.closest(".node")?.querySelector<HTMLElement>(".tb")?.offsetHeight ?? 0;
+        return void vp.scrollTo({ top: p.y - head, left: 0, behavior });
+      }
       vp.scrollTo({ top: p.y * z - 24, left: Math.max(0, p.x * z - 200), behavior });
     });
     return () => cancelAnimationFrame(frame);
@@ -173,6 +182,15 @@ function LoadedReview({ review, initial }: { review: Review; initial: ReviewStat
       requestScroll(false);
     },
     [hasGoals, requestScroll],
+  );
+  const switchLayout = useCallback(
+    (l: Layout) => {
+      setLayout(l);
+      localStorage.setItem(LAYOUT_KEY, l);
+      setFocusing(false);
+      requestScroll(false);
+    },
+    [requestScroll],
   );
   const toggleReviewed = useCallback(() => {
     const { g, mode, state } = live.current;
@@ -224,6 +242,8 @@ function LoadedReview({ review, initial }: { review: Review; initial: ReviewStat
           return switchMode("map");
         case "guided-view":
           return switchMode("guided");
+        case "toggle-layout":
+          return live.current.mode === "guided" ? switchLayout(live.current.layout === "diff" ? "canvas" : "diff") : undefined;
         case "close-drawer":
           return setDrawer(null);
         case "close-review":
@@ -234,7 +254,7 @@ function LoadedReview({ review, initial }: { review: Review; initial: ReviewStat
           return setFocusing(false);
       }
     },
-    [move, go, toggleReviewed, switchMode, zoom],
+    [move, go, toggleReviewed, switchMode, switchLayout, zoom],
   );
   const actRef = useRef(act);
   actRef.current = act;
@@ -255,7 +275,7 @@ function LoadedReview({ review, initial }: { review: Review; initial: ReviewStat
     scrollerRef: vpRef,
     worldRef,
     far: zoom.far,
-    scope: `${mode}:${g}`,
+    scope: `${mode}:${layout}:${g}`,
     isRead: (key) => !!live.current.state.read[key] || !!live.current.state.read[key.split("@")[0]!],
     onRead: (keys) => {
       const at = new Date().toISOString();
@@ -333,7 +353,7 @@ function LoadedReview({ review, initial }: { review: Review; initial: ReviewStat
   return (
     <CourseContext.Provider value={ctx}>
       <div className="app">
-        <TopBar review={review} drafts={state.drafts.length} mode={mode} onMode={switchMode} onReview={() => setReviewOpen((o) => !o)} onCourse={() => setCourseOpen((o) => !o)} courseOpen={courseOpen} />
+        <TopBar review={review} drafts={state.drafts.length} mode={mode} onMode={switchMode} layout={layout} onLayout={switchLayout} onReview={() => setReviewOpen((o) => !o)} onCourse={() => setCourseOpen((o) => !o)} courseOpen={courseOpen} />
         <GoalSheet
           open={courseOpen}
           idx={idx}
@@ -379,6 +399,17 @@ function LoadedReview({ review, initial }: { review: Review; initial: ReviewStat
             <div className={`world${zoom.far ? " far" : ""}`} ref={worldRef}>
               {mode === "map" ? (
                 <MapView focusOob={focusOob} onGoalBadge={goToGoalId} far={zoom.far} onFarClick={zoom.zoomToElement} reveal={reveal} />
+              ) : layout === "diff" ? (
+                <DiffColumn
+                  goal={goal}
+                  g={g}
+                  stop={s}
+                  onGoal={go}
+                  onStop={(si) => goStop(si, { scroll: false })}
+                  onGoalBadge={goToGoalId}
+                  onMap={() => switchMode("map")}
+                  onFileClick={(si) => goStop(si)}
+                />
               ) : (
                 <CoursePage
                   worldRef={worldRef}
@@ -400,10 +431,12 @@ function LoadedReview({ review, initial }: { review: Review; initial: ReviewStat
           </div>
           {drawer?.kind === "chunk" && <ChunkDrawer hunkId={drawer.hunkId} symbols={drawer.symbols} onClose={() => setDrawer(null)} onGoToGoal={goToGoalId} />}
           {drawer?.kind === "file" && <FileDrawer fileId={drawer.fileId} onClose={() => setDrawer(null)} />}
-          <KeysBar mode={mode} />
-          <button className="btn zoom-btn" onClick={zoom.toggleOverview}>
-            {pct}% · {zoom.far ? "Back to reading" : mode === "map" ? "Zoom out" : "Whole course"}
-          </button>
+          <KeysBar mode={mode} layout={layout} />
+          {(mode === "map" || layout === "canvas") && (
+            <button className="btn zoom-btn" onClick={zoom.toggleOverview}>
+              {pct}% · {zoom.far ? "Back to reading" : mode === "map" ? "Zoom out" : "Whole course"}
+            </button>
+          )}
           <div className={`toast${toast ? " show" : ""}`} role="status" aria-live="polite">
             {toast}
           </div>
@@ -424,7 +457,7 @@ function LoadedReview({ review, initial }: { review: Review; initial: ReviewStat
   );
 }
 
-function KeysBar({ mode }: { mode: Mode }) {
+function KeysBar({ mode, layout }: { mode: Mode; layout: Layout }) {
   return (
     <div className="keys" aria-hidden="true">
       {mode === "guided" ? (
@@ -440,8 +473,14 @@ function KeysBar({ mode }: { mode: Mode }) {
           <span>
             <kbd>X</kbd>mark reviewed
           </span>
+          {layout === "canvas" && (
+            <span>
+              <kbd>F</kbd>whole course
+            </span>
+          )}
           <span>
-            <kbd>F</kbd>whole course
+            <kbd>L</kbd>
+            {layout === "canvas" ? "diff" : "canvas"}
           </span>
           <span>
             <kbd>M</kbd>map

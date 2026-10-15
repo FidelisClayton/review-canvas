@@ -24,6 +24,13 @@ describe("keyAction", () => {
     expect(keyAction({ key: "0" }, none)).toBeNull();
   });
 
+  it("maps l and L to toggle-layout, except in a textarea or with a modifier", () => {
+    expect(keyAction({ key: "l" }, none)).toBe("toggle-layout");
+    expect(keyAction({ key: "L" }, none)).toBe("toggle-layout");
+    expect(keyAction({ key: "l", target: textarea }, none)).toBeNull();
+    expect(keyAction({ key: "l", metaKey: true }, none)).toBeNull();
+  });
+
   it("closes the drawer before the review drawer before the composer", () => {
     expect(keyAction({ key: "Escape" }, { drawer: true, review: true, composer: true })).toBe("close-drawer");
     expect(keyAction({ key: "Escape" }, { drawer: false, review: true, composer: true })).toBe("close-review");

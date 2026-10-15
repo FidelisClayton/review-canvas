@@ -15,9 +15,12 @@ export interface Zoom {
 const isTextField = (t: EventTarget | null) => t instanceof HTMLElement && !!t.closest("input,textarea,select,[contenteditable='true']");
 
 /** CSS zoom on the world around the cursor, trackpad and touch pinch, F overview, Space+drag pan. */
-export function useZoom(scrollerRef: RefObject<HTMLElement | null>, worldRef: RefObject<HTMLElement | null>): Zoom {
+export function useZoom(scrollerRef: RefObject<HTMLElement | null>, worldRef: RefObject<HTMLElement | null>, enabled = true): Zoom {
   const [zoom, setZoomState] = useState(1);
   const z = useRef(1);
+  // The listeners below register once, so they read the live flag from a ref.
+  const on = useRef(enabled);
+  on.current = enabled;
 
   // Zoom around a viewport point (default: the centre), keeping the world point under it fixed.
   const setZoom = useCallback(
@@ -38,7 +41,7 @@ export function useZoom(scrollerRef: RefObject<HTMLElement | null>, worldRef: Re
     [scrollerRef, worldRef],
   );
 
-  const toggleOverview = useCallback(() => setZoom(isFar(z.current) ? 1 : OVERVIEW_ZOOM), [setZoom]);
+  const toggleOverview = useCallback(() => on.current && setZoom(isFar(z.current) ? 1 : OVERVIEW_ZOOM), [setZoom]);
 
   const zoomToElement = useCallback(
     (el: HTMLElement) => {
@@ -69,6 +72,7 @@ export function useZoom(scrollerRef: RefObject<HTMLElement | null>, worldRef: Re
     const onWheel = (e: WheelEvent) => {
       if (!e.ctrlKey) return;
       e.preventDefault();
+      if (!on.current) return;
       setZoom(z.current * Math.exp(-e.deltaY * 0.01), ...at(e));
     };
     // Safari trackpad pinch.
@@ -79,6 +83,7 @@ export function useZoom(scrollerRef: RefObject<HTMLElement | null>, worldRef: Re
     };
     const onGestureChange = (e: Event) => {
       e.preventDefault();
+      if (!on.current) return;
       const g = e as Event & { scale: number; clientX: number; clientY: number };
       setZoom(z0 * g.scale, ...at(g));
     };
@@ -105,6 +110,7 @@ export function useZoom(scrollerRef: RefObject<HTMLElement | null>, worldRef: Re
     const show = () => (vp.dataset.pan = pan ? "drag" : space ? "ready" : "");
 
     const onPointerDown = (e: PointerEvent) => {
+      if (!on.current) return;
       if (e.pointerType === "touch") {
         pts.set(e.pointerId, { x: e.clientX, y: e.clientY });
         if (pts.size === 2) {
@@ -124,7 +130,7 @@ export function useZoom(scrollerRef: RefObject<HTMLElement | null>, worldRef: Re
     const onPointerMove = (e: PointerEvent) => {
       if (pts.has(e.pointerId)) {
         pts.set(e.pointerId, { x: e.clientX, y: e.clientY });
-        const p = pts.size === 2 && d0 ? pair() : null;
+        const p = on.current && pts.size === 2 && d0 ? pair() : null;
         if (p) {
           const r = vp.getBoundingClientRect();
           setZoom((zt * p.d) / d0, (p.a.x + p.b.x) / 2 - r.left, (p.a.y + p.b.y) / 2 - r.top);
@@ -153,7 +159,7 @@ export function useZoom(scrollerRef: RefObject<HTMLElement | null>, worldRef: Re
     };
 
     const onKeyDown = (e: KeyboardEvent) => {
-      if (e.key !== " " || isTextField(e.target)) return;
+      if (!on.current || e.key !== " " || isTextField(e.target)) return;
       // Space scrolls the page when nothing is focused; stop that, but let it press a focused button or follow a link.
       const t = e.target;
       const idle = t === document.body || (t instanceof HTMLElement && vp.contains(t) && !t.closest("button,a,summary,[role=button]"));

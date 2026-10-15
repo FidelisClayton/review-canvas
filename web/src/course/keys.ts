@@ -7,6 +7,7 @@ export type KeyAction =
   | "toggle-overview"
   | "map-view"
   | "guided-view"
+  | "toggle-layout"
   | "close-drawer"
   | "close-review"
   | "close-composer"
@@ -52,6 +53,8 @@ export function keyAction(e: KeyEventLike, ctx: KeyContext): KeyAction | null {
       return "map-view";
     case "g":
       return "guided-view";
+    case "l":
+      return "toggle-layout";
     default:
       return null;
   }

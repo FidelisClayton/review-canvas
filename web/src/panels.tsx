@@ -5,7 +5,7 @@ import { needsMark, totals, type CourseIndex } from "./course/model";
 
 const base = (p: string) => p.split("/").pop() ?? p;
 
-export function TopBar({ review, drafts, mode, onMode, onReview, onCourse, courseOpen }: { review: Review; drafts: number; mode: "guided" | "map"; onMode: (m: "guided" | "map") => void; onReview: () => void; onCourse: () => void; courseOpen: boolean }) {
+export function TopBar({ review, drafts, mode, onMode, onReview, onCourse, courseOpen, layout, onLayout }: { review: Review; drafts: number; mode: "guided" | "map"; onMode: (m: "guided" | "map") => void; layout?: "canvas" | "diff"; onLayout?: (l: "canvas" | "diff") => void; onReview: () => void; onCourse: () => void; courseOpen: boolean }) {
   const { pr } = review.analysis;
   return (
     <header className="top">
@@ -48,6 +48,16 @@ export function TopBar({ review, drafts, mode, onMode, onReview, onCourse, cours
           Map <kbd>M</kbd>
         </button>
       </div>
+      {mode === "guided" && onLayout && (
+        <div className="modes" role="group" aria-label="Layout">
+          <button aria-pressed={layout !== "diff"} onClick={() => onLayout("canvas")}>
+            Canvas <kbd>L</kbd>
+          </button>
+          <button aria-pressed={layout === "diff"} onClick={() => onLayout("diff")}>
+            Diff <kbd>L</kbd>
+          </button>
+        </div>
+      )}
       {review.defaultCourse && (
         <span className="synthetic" title="No agent has planned goals for this PR yet, so only the Map view is available.">
           No course

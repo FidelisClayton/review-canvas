@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { buildView, courseInputSchema, emptyState, mergeCourse, stopKey, type ReviewState } from "@review-canvas/shared";
 import { fixture } from "../../../shared/src/fixture.test-helper";
-import { buildIndex, totals } from "./model";
+import { buildIndex, framesOf, totals } from "./model";
 
 const { analysis } = fixture();
 const build = (input: unknown) => {
@@ -38,5 +38,20 @@ describe("totals", () => {
     expect(totals(idx, emptyState()).stopsRead).toBe(0);
     expect(totals(idx, withRead(crop.hunkId)).stopsRead).toBe(1);
     expect(totals(idx, withRead(stopKey(crop))).stopsRead).toBe(1);
+  });
+});
+
+describe("framesOf", () => {
+  it("makes one frame per file, in the order the goal first reaches it", () => {
+    const { review, idx } = build({ goals: [goal("A", ["f2.h1", "f4.h1", "f2.h2"])] });
+    const frames = framesOf(idx.goals[0]!, buildView(review));
+    expect(frames.map((f) => f.fileId)).toEqual(["f2", "f4"]);
+    expect(frames[0]!.stops.map((s) => s.si)).toEqual([0, 2]);
+    expect(frames[1]!.stops.map((s) => s.si)).toEqual([1]);
+  });
+
+  it("returns no frames for a goal with no stops", () => {
+    const { review, idx } = build({ goals: [goal("A", ["f2.h1"])] });
+    expect(framesOf({ ...idx.goals[0]!, stops: [] }, buildView(review))).toEqual([]);
   });
 });

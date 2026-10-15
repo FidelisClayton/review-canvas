@@ -56,20 +56,9 @@ export function CoursePage(p: CoursePageProps) {
   if (goal.gap) {
     const last = frames[frames.length - 1];
     const layer = last ? c.view.files.get(last.fileId)!.layer : "other";
-    byBand[layer].push(
-      <div className="node gapnode" key="gap">
-        <b>Missing test</b>
-        {goal.gap}
-      </div>,
-    );
+    byBand[layer].push(<GapNode key="gap" gap={goal.gap} />);
   }
-  if (!goal.stops.length)
-    byBand.other.unshift(
-      <div className="node gapnode" key="none">
-        <b>{goal.unclaimed ? "No changes outside the goals" : "No changed code serves this goal"}</b>
-        {goal.unclaimed ? "Every changed chunk serves a goal." : "Nothing in this PR shows the goal was met."}
-      </div>,
-    );
+  if (!goal.stops.length) byBand.other.unshift(<EmptyGoalNode key="none" unclaimed={goal.unclaimed} />);
   // Files other goals use, faded: a click goes to the first goal that uses them.
   for (const f of c.review.analysis.files) {
     const gs = c.idx.ofFile.get(f.id);
@@ -89,7 +78,25 @@ export function CoursePage(p: CoursePageProps) {
   );
 }
 
-function FileFrame({ frame, fi, goal, g, stop, onStop, onGoalBadge }: { frame: Frame; fi: number; goal: CourseGoal } & CoursePageProps) {
+export function GapNode({ gap }: { gap: string }) {
+  return (
+    <div className="node gapnode">
+      <b>Missing test</b>
+      {gap}
+    </div>
+  );
+}
+
+export function EmptyGoalNode({ unclaimed }: { unclaimed: boolean }) {
+  return (
+    <div className="node gapnode">
+      <b>{unclaimed ? "No changes outside the goals" : "No changed code serves this goal"}</b>
+      {unclaimed ? "Every changed chunk serves a goal." : "Nothing in this PR shows the goal was met."}
+    </div>
+  );
+}
+
+export function FileFrame({ frame, fi, goal, g, stop, onStop, onGoalBadge }: { frame: Frame; fi: number; goal: CourseGoal } & Pick<CoursePageProps, "g" | "stop" | "onStop" | "onGoalBadge">) {
   const c = useCourse();
   const f = c.view.files.get(frame.fileId)!;
   const nums = frame.stops.map((s) => s.si + 1);
@@ -141,7 +148,7 @@ function Tile({ file, gs, onGoal }: { file: PrFile; gs: number[]; onGoal: (g: nu
   );
 }
 
-function StartSheet({ onGoal, onMap }: { onGoal: (g: number) => void; onMap: () => void }) {
+export function StartSheet({ onGoal, onMap }: { onGoal: (g: number) => void; onMap: () => void }) {
   const c = useCourse();
   const { pr } = c.review.analysis;
   return (

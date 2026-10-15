@@ -1,0 +1,20 @@
+/* Diff layout: one column of file frames with a file list on the left. */
+/* The nav is sized from the real scroller: its sticky top (24px) plus room for the floating .keys bar (~50px). */
+.viewport:has(.diffcol){container-type:size}
+.diffcol{padding:24px;display:grid;grid-template-columns:minmax(0,1fr);gap:24px;align-items:start}
+.diffcol.hasnav{grid-template-columns:260px minmax(0,1fr)}
+.diffcol .frames{display:flex;flex-direction:column;gap:24px;min-width:0}
+.diffcol .node{width:auto}
+.diffcol .tb{position:sticky;top:0;z-index:3;background:var(--sheet)}
+.diffcol nav{position:sticky;top:24px;max-height:calc(100cqh - 24px - 64px);overflow:auto;display:flex;flex-direction:column;background:var(--sheet);border:1px solid var(--ink)}
+.diffcol .frow{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px;align-items:baseline;padding:8px 12px;border:0;border-bottom:1px solid var(--rule);background:none;text-align:left;font-size:13px}
+.diffcol .frow:hover{background:#f6f4f0}
+.diffcol .frow[aria-current="true"]{background:var(--purple-tint)}
+.diffcol .frow .path{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.diffcol .frow .dir{color:var(--ink-3)}
+.diffcol .frow b{font-weight:700}
+.diffcol .frow .nums{font-family:var(--cond);font-weight:800;font-size:16px;color:var(--purple)}
+@media (max-width:760px){
+  .diffcol.hasnav{grid-template-columns:minmax(0,1fr)}
+  .diffcol nav{display:none}
+}
