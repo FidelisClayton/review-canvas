@@ -1,119 +1,58 @@
 {
-  "route": "Storage first, then the jobs that use it, the email they send, the API contract and the endpoint behind its Retry link, and the button that calls it. Tests sit next to the code they cover.",
-  "order": [
-    "f1",
-    "f2",
-    "f3",
-    "f4",
-    "f5",
-    "f6",
-    "f7",
-    "f8",
-    "f9",
-    "f10",
-    "f11",
-    "f12",
-    "f13",
-    "f14",
-    "f15",
-    "f16",
-    "f17",
-    "f18",
-    "f19",
-    "f20",
-    "f21"
-  ],
-  "files": {
-    "f1": {
-      "what": "Adds attempts, last_error and failed_at to order_syncs, plus a partial index on failed_at.",
-      "why": "Start here: every other file reads or writes these columns."
+  "sentence": "Failed order syncs now retry with backoff and give up after five attempts, shop owners get a daily digest of the failures, and admins can retry a failed sync from the badge.",
+  "goals": [
+    {
+      "title": "Failed syncs retry automatically with backoff",
+      "src": "SYNC-7",
+      "quote": "A sync that fails is retried on its own, waiting longer each time.",
+      "stops": ["f1.h1", "f2.h1", "f2.h2", "f4.h1", "f4.h2", "f3.h1@keeps retrying before the limit", "f5.h1"]
     },
-    "f2": {
-      "what": "Splits the old errored status into retrying and failed, and adds record_failure! and retry!.",
-      "why": "The job, the controller and the UI all call into this model."
+    {
+      "title": "Syncs give up after five attempts and are marked failed",
+      "src": "SYNC-7",
+      "quote": "After five failed attempts the sync is marked failed and stops retrying.",
+      "stops": ["f2.h2", "f3.h1@marks the sync failed on the fifth attempt"]
     },
-    "f3": {
-      "what": "Covers the attempt limit and the retrying branch.",
-      "why": "Sits beside the model it tests."
+    {
+      "title": "Shop owners get a daily digest of failed syncs",
+      "src": "SYNC-8",
+      "quote": "Each morning the shop owner gets one email listing the syncs that failed in the last 24 hours.",
+      "stops": ["f6.h1", "f7.h1", "f8.h1", "f9.h1", "f10.h1"],
+      "gap": "No test covers the digest job, the mailer or the template."
     },
-    "f4": {
-      "what": "Failures now go through record_failure!, and retrying syncs are enqueued again with backoff.",
-      "why": "The first caller of the model methods you just read."
-    },
-    "f5": {
-      "what": "Checks the job enqueues itself again with backoff.",
-      "why": "Sits beside the job it tests."
-    },
-    "f6": {
-      "what": "New job that sends each shop one digest of the syncs that failed in the last 24 hours.",
-      "why": "Uses failed_since from the model and hands off to the mailer."
-    },
-    "f7": {
-      "what": "Schedules FailureDigestJob for 7am every day.",
-      "why": "The only thing that runs the digest job."
-    },
-    "f8": {
-      "what": "Adds the failure_digest email, sent to the shop owner.",
-      "why": "What the digest job delivers."
-    },
-    "f9": {
-      "what": "Email template: one row per failed order, each with a Retry link into the admin.",
-      "why": "Its Retry link is what the new route serves."
-    },
-    "f10": {
-      "what": "English copy for the digest subject and the retry notice.",
-      "why": "Read after the mailer that uses its subject key."
-    },
-    "f11": {
-      "what": "Adds the retry operation to the admin API and the new fields on OrderSync.",
-      "why": "The contract. The OpenAPI file and the zod client are generated from it."
-    },
-    "f16": {
-      "what": "Adds POST /admin/syncs/:id/retry.",
-      "why": "The entry point for the Retry button and the email link."
-    },
-    "f17": {
-      "what": "Only admins and the shop owner may retry.",
-      "why": "Read before the controller that authorizes against it."
-    },
-    "f18": {
-      "what": "New retry action: authorize, call retry!, answer as JSON or redirect.",
-      "why": "Joins the route, the policy and the model."
-    },
-    "f19": {
-      "what": "Mirrors the new statuses and adds retrySync, which tracks in-flight retries.",
-      "why": "Calls the controller you just read."
-    },
-    "f20": {
-      "what": "Failed syncs get a Retry button that shows a loading state while the retry runs.",
-      "why": "Last stop: what the shop owner sees."
-    },
-    "f21": {
-      "what": "Status labels for the badge, including the new Retry button.",
-      "why": "Read after the badge that renders these labels."
+    {
+      "title": "Admins can retry a failed sync from the UI",
+      "src": "SYNC-9",
+      "quote": "A failed sync shows a Retry button that queues it again.",
+      "stops": ["f11.h1", "f16.h1", "f17.h1", "f18.h1", "f19.h2", "f20.h1", "f21.h1"],
+      "gap": "Nothing tests the retry endpoint, its policy or the button."
     }
-  },
+  ],
+  "unclaimed": ["f19.h1"],
   "hunks": {
-    "f1.h1": "New migration. The partial index only covers failed rows.",
-    "f2.h1": "Enum value 2 changes from errored to retrying, so existing errored rows will read as retrying.",
-    "f2.h2": "record_failure! counts attempts and gives up at five. retry! resets the sync and enqueues it again.",
-    "f3.h1": "Two cases for record_failure!. retry! has no test yet.",
-    "f4.h1": "Adds retry_on for rate limits and its own retry loop for other errors.",
-    "f4.h2": "Exponential backoff: 2, 4, 8 and 16 minutes.",
-    "f5.h1": "One case: a 502 on the second attempt re-enqueues after 4 minutes.",
-    "f6.h1": "New file. Queries failed syncs once per shop and delivers later.",
-    "f7.h1": "Solid Queue recurring task. Runs in the server's time zone.",
-    "f8.h1": "Subject comes from the locale file and counts the failed orders.",
-    "f9.h1": "last_error is nullable, so .truncate can raise on a nil error.",
-    "f10.h1": "Pluralized subject, plus the flash notice the controller shows.",
-    "f11.h1": "Retry can answer 404 and 403. The status union matches the model enum.",
-    "f16.h1": "Member route on the existing admin syncs resource.",
-    "f17.h1": "Narrower than show?, which also lets staff in.",
-    "f18.h1": "Nothing checks that the sync is failed before retrying it.",
-    "f19.h1": "Type now matches the model enum.",
-    "f19.h2": "Optimistic retrying flag, cleared when the response lands. No error path.",
-    "f20.h1": "Button only appears for failed, not for retrying.",
-    "f21.h1": "Drops the errored label and adds retrying, failed and retry."
+    "f1.h1": { "summary": "Add attempts, last_error and failed_at to order_syncs, with a partial index" },
+    "f2.h1": {
+      "summary": "Split the errored status into retrying and failed; add MAX_ATTEMPTS and failed_since",
+      "lines": [{ "side": "RIGHT", "line": 6, "text": "Value 2 now means retrying; old errored rows change meaning" }]
+    },
+    "f2.h2": { "summary": "Add `record_failure!`, which gives up at five attempts, and `retry!`" },
+    "f3.h1": { "summary": "Test that the fifth failure marks the sync failed and earlier ones keep retrying" },
+    "f4.h1": { "summary": "Route job failures through `record_failure!` and enqueue retrying syncs again" },
+    "f4.h2": { "summary": "Back off exponentially: 2, 4, 8 and 16 minutes" },
+    "f5.h1": { "summary": "Test that a 502 on the second attempt re-enqueues the job after 4 minutes" },
+    "f6.h1": { "summary": "Add `FailureDigestJob`, one email per shop for syncs failed in the last day" },
+    "f7.h1": { "summary": "Schedule `FailureDigestJob` for 7am every day" },
+    "f8.h1": { "summary": "Add the `failure_digest` mail to the shop owner" },
+    "f9.h1": { "summary": "Add the digest email template with a Retry link per failed order" },
+    "f10.h1": { "summary": "Add the digest subject and the retry notice copy" },
+    "f11.h1": { "summary": "Add the retry operation and the new statuses to the admin API contract" },
+    "f16.h1": { "summary": "Route `POST /admin/syncs/:id/retry`" },
+    "f17.h1": { "summary": "Allow only admins and the shop owner to retry" },
+    "f18.h1": { "summary": "Add the `retry` action: authorize, call `retry!`, answer JSON or redirect" },
+    "f19.h1": { "summary": "Match the status type to the new model enum" },
+    "f19.h2": { "summary": "Add `retrySync`, which tracks in-flight retries" },
+    "f20.h1": { "summary": "Show a Retry button on failed syncs with a loading state" },
+    "f21.h1": { "summary": "Replace the errored label with retrying, failed and retry" }
   },
   "links": []
 }

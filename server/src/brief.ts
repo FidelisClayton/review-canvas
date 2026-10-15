@@ -1,4 +1,4 @@
-import { defaultCourse, LAYER_INFO, onCourse, type Analysis, type CourseInput, type PrFile } from "@review-canvas/shared";
+import { LAYER_INFO, onCourse, type Analysis, type CourseInput, type PrFile } from "@review-canvas/shared";
 
 // The brief is what the agent reads before planning the course. It carries every id the agent
 // may use, the diff of every hunk it should summarize, and the links the server already found,
@@ -84,17 +84,7 @@ The repository is not checked out. To read more than the diff shows:
   return sections.filter(Boolean).join("\n\n") + "\n";
 }
 
-/** A course the agent edits in place: default order, every id present, notes empty. */
-export function courseTemplate(analysis: Analysis): CourseInput {
-  const base = defaultCourse(analysis);
-  const byId = new Map(analysis.files.map((f) => [f.id, f]));
-  const files: CourseInput["files"] = {};
-  const hunks: CourseInput["hunks"] = {};
-  for (const id of base.order) {
-    const f = byId.get(id)!;
-    if (isGeneratedOutput(f)) continue;
-    files[id] = { what: "", why: "" };
-    for (const h of f.hunks) hunks[h.id] = "";
-  }
-  return { route: "", order: base.order, files, hunks, links: [] };
+/** A course the agent edits in place. U5 pre-fills the summary slots. */
+export function courseTemplate(_analysis: Analysis): CourseInput {
+  return { sentence: "", goals: [], unclaimed: [], hunks: {}, links: [] };
 }

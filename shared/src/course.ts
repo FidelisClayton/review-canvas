@@ -1,96 +1,114 @@
+import { cropTests } from "./crop.js";
 import { hunkMentions } from "./links.js";
 import type { CourseInput } from "./schemas.js";
-import { LAYERS, type Analysis, type Course, type Link, type PrFile, type Review } from "./types.js";
+import type { Analysis, Course, Goal, Hunk, Link, PrFile, Review, Stop } from "./types.js";
 
-/** Files that can be on the course. Always-generated files are out of bounds for everyone. */
-export const onCourse = (f: PrFile) => f.noise !== "generated";
+/** Files that can be stops. Generated output and API clients are out of bounds (viewable, never stops). */
+export const onCourse = (f: PrFile) => f.noise !== "generated" && f.noise !== "api";
 
-/** The file a dependent rides with: a test with its subject, generated output with its source. */
-export const parentOf = (f: PrFile): string | undefined => f.subjectOf ?? f.generatedFrom;
-
-/** Order when no agent course exists: by layer, sources before their dependents, then by path. */
-export function defaultOrder(analysis: Analysis): string[] {
-  const rank = (f: PrFile) => LAYERS.indexOf(f.layer);
-  // Within a layer, migrations come first: the models below them read their columns.
-  const lead = (f: PrFile) => (/^db\/migrate\//.test(f.path) ? 0 : 1);
-  return analysis.files
-    .filter(onCourse)
-    .slice()
-    .sort((a, b) => rank(a) - rank(b) || lead(a) - lead(b) || Number(!!parentOf(a)) - Number(!!parentOf(b)) || a.path.localeCompare(b.path))
-    .map((f) => f.id);
-}
-
-/**
- * Makes any proposed order complete and consistent: drops unknown and out-of-bounds ids and
- * duplicates, appends forgotten files in the default order, and moves each dependent directly
- * after the file it rides with, so a test always sits beside its subject.
- */
-export function normalizeOrder(analysis: Analysis, proposed: string[], warnings: string[] = []): string[] {
-  const byId = new Map(analysis.files.map((f) => [f.id, f]));
-  const seen = new Set<string>();
-  const order: string[] = [];
-  for (const id of proposed) {
-    const f = byId.get(id);
-    if (!f) {
-      warnings.push(`order: unknown file id "${id}" was ignored.`);
-      continue;
-    }
-    if (!onCourse(f)) {
-      warnings.push(`order: ${f.path} is out of bounds (${f.noiseReason ?? "generated"}) and was left off the course.`);
-      continue;
-    }
-    if (seen.has(id)) continue;
-    seen.add(id);
-    order.push(id);
-  }
-  const missing = defaultOrder(analysis).filter((id) => !seen.has(id));
-  // Tests and generated files whose subject or source is on the course need no place of their
-  // own; they are seated beside it below. Only files that need a place are worth a warning.
-  const unplaced = missing.filter((id) => {
-    const p = parentOf(byId.get(id)!);
-    return !p || !(seen.has(p) || missing.includes(p));
-  });
-  if (unplaced.length) warnings.push(`order: ${unplaced.length} file(s) were missing and were appended by layer: ${unplaced.map((id) => byId.get(id)!.path).join(", ")}.`);
-  for (const id of missing) seen.add(id);
-  order.push(...missing);
-
-  const dependents = new Map<string, string[]>();
-  const roots: string[] = [];
-  for (const id of order) {
-    const parent = parentOf(byId.get(id)!);
-    if (parent && seen.has(parent) && parent !== id) {
-      const list = dependents.get(parent) ?? [];
-      list.push(id);
-      dependents.set(parent, list);
-    } else roots.push(id);
-  }
-  return roots.flatMap((id) => [id, ...(dependents.get(id) ?? [])]);
-}
-
-export function defaultCourse(analysis: Analysis): Course {
-  return { route: "", order: normalizeOrder(analysis, defaultOrder(analysis)), files: {}, hunks: {} };
-}
+const slug = (title: string) => title.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "") || "goal";
 
 /** Checks an agent's course against the analysis. Nothing the agent says is taken on trust. */
 export function mergeCourse(analysis: Analysis, input: CourseInput, now = new Date()): Review {
   const warnings: string[] = [];
-  const files = new Map(analysis.files.map((f) => [f.id, f]));
   const hunks = new Map(analysis.files.flatMap((f) => f.hunks.map((h) => [h.id, { hunk: h, file: f }] as const)));
 
-  const course: Course = {
-    route: input.route,
-    order: normalizeOrder(analysis, input.order, warnings),
-    files: {},
-    hunks: {},
-  };
-  for (const [id, notes] of Object.entries(input.files)) {
-    if (files.has(id)) course.files[id] = notes;
-    else warnings.push(`files: unknown file id "${id}" was ignored.`);
+  // "f3.h1" is the whole chunk; "f3.h1@text" crops the one test whose name contains text.
+  function resolve(ref: string, where: string): Stop | null {
+    const at = ref.indexOf("@");
+    const id = at < 0 ? ref : ref.slice(0, at);
+    const entry = hunks.get(id);
+    if (!entry) {
+      warnings.push(`${where}: unknown hunk id "${id}" was ignored.`);
+      return null;
+    }
+    const { hunk, file } = entry;
+    if (!onCourse(file)) {
+      warnings.push(`${where}: ${file.path} is out of bounds (${file.noiseReason ?? "generated"}) and cannot be a stop; ${id} was ignored.`);
+      return null;
+    }
+    const test = file.noise === "tests";
+    const whole: Stop = { hunkId: id, from: 0, to: hunk.lines.length - 1, test };
+    if (at < 0) return whole;
+    const needle = ref.slice(at + 1);
+    const { crops, names } = cropTests(hunk, needle);
+    if (crops.length === 1) return { hunkId: id, from: crops[0]!.from, to: crops[0]!.to, test: true, name: crops[0]!.name };
+    const found = names.length ? `tests found: ${names.map((n) => `"${n}"`).join(", ")}` : "no tests found in it";
+    warnings.push(`${where}: "${needle}" matches ${crops.length ? `${crops.length} tests` : "no test"} in ${id}; the whole chunk was used (${found}).`);
+    return whole;
   }
-  for (const [id, summary] of Object.entries(input.hunks)) {
-    if (hunks.has(id)) course.hunks[id] = summary;
-    else warnings.push(`hunks: unknown hunk id "${id}" was ignored.`);
+
+  const taken = new Set(["unclaimed"]);
+  const goals: Goal[] = [];
+  for (const g of input.goals) {
+    const where = `goals "${g.title}"`;
+    const stops: Stop[] = [];
+    const seen = new Set<string>();
+    for (const ref of g.stops) {
+      const stop = resolve(ref, where);
+      if (!stop) continue;
+      const key = stop.name === undefined ? stop.hunkId : `${stop.hunkId}@${stop.from}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      stops.push(stop);
+    }
+    // A chunk cited whole and cropped in one goal keeps the whole citation.
+    const whole = new Set(stops.filter((s) => s.name === undefined).map((s) => s.hunkId));
+    const kept = stops.filter((s) => s.name === undefined || !whole.has(s.hunkId));
+    // Tests come last, in the order the agent gave them.
+    const ordered = [...kept.filter((s) => !s.test), ...kept.filter((s) => s.test)];
+    if (!ordered.length && !g.gap) {
+      warnings.push(`${where}: no stops and no gap sentence; the goal was dropped.`);
+      continue;
+    }
+    let id = slug(g.title);
+    for (let n = 2; taken.has(id); n += 1) id = `${slug(g.title)}-${n}`;
+    taken.add(id);
+    goals.push({ id, title: g.title, src: g.src, quote: g.quote, stops: ordered, ...(g.gap ? { gap: g.gap } : {}) });
   }
+
+  // A crop counts its whole chunk as cited.
+  const cited = new Set(goals.flatMap((g) => g.stops.map((s) => s.hunkId)));
+  const unclaimed: Stop[] = [];
+  for (const ref of input.unclaimed) {
+    const stop = resolve(ref, "unclaimed");
+    if (!stop || unclaimed.some((u) => u.hunkId === stop.hunkId)) continue;
+    if (cited.has(stop.hunkId)) {
+      warnings.push(`unclaimed: ${stop.hunkId} is cited by a goal, so it was left off the unclaimed stop.`);
+      continue;
+    }
+    unclaimed.push(stop);
+  }
+  const forgotten: string[] = [];
+  for (const f of analysis.files.filter(onCourse)) {
+    for (const h of f.hunks) {
+      if (cited.has(h.id) || unclaimed.some((u) => u.hunkId === h.id)) continue;
+      unclaimed.push({ hunkId: h.id, from: 0, to: h.lines.length - 1, test: f.noise === "tests" });
+      forgotten.push(`${h.id} (${f.path})`);
+    }
+  }
+  if (forgotten.length) warnings.push(`unclaimed: ${forgotten.length} on-course chunk(s) were cited by no goal and were added to the unclaimed stop: ${forgotten.join(", ")}.`);
+
+  const notes: Course["notes"] = {};
+  for (const [id, note] of Object.entries(input.hunks)) {
+    const entry = hunks.get(id);
+    if (!entry) {
+      warnings.push(`hunks: unknown hunk id "${id}" was ignored.`);
+      continue;
+    }
+    if (!onCourse(entry.file)) {
+      warnings.push(`hunks: ${entry.file.path} is out of bounds; the note for ${id} was ignored.`);
+      continue;
+    }
+    const lines = note.lines.filter((l) => {
+      if (anchored(entry.hunk, l)) return true;
+      warnings.push(`hunks: ${id} line note on ${l.side} line ${l.line} is not a line of that chunk; dropped.`);
+      return false;
+    });
+    notes[id] = { summary: note.summary, lines };
+  }
+
+  const course: Course = { sentence: input.sentence, goals, unclaimed, notes };
 
   const existing = new Set(analysis.links.map((l) => `${l.from}>${l.to}`));
   const agentLinks: Link[] = [];
@@ -114,9 +132,23 @@ export function mergeCourse(analysis: Analysis, input: CourseInput, now = new Da
     agentLinks.push({ id: `A${agentLinks.length + 1}`, from: link.from, to: link.to, label: link.label, symbol: link.symbol, source: "agent" });
   }
 
-  return { analysis, course, agentLinks, defaultCourse: false, warnings, publishedAt: now.toISOString() };
+  return { version: 2, analysis, course, agentLinks, defaultCourse: false, warnings, publishedAt: now.toISOString() };
 }
 
+/** RIGHT notes sit on a line with a head line number; LEFT notes only on a deleted line. */
+function anchored(hunk: Hunk, note: { side: "LEFT" | "RIGHT"; line: number }) {
+  return hunk.lines.some((l) => (note.side === "RIGHT" ? l.newNo === note.line : l.kind === "del" && l.oldNo === note.line));
+}
+
+/** A review with no agent course: no goals and nothing unclaimed, so the canvas shows the map only. */
 export function draftReview(analysis: Analysis): Review {
-  return { analysis, course: defaultCourse(analysis), agentLinks: [], defaultCourse: true, warnings: [], publishedAt: null };
+  return {
+    version: 2,
+    analysis,
+    course: { sentence: "", goals: [], unclaimed: [], notes: {} },
+    agentLinks: [],
+    defaultCourse: true,
+    warnings: [],
+    publishedAt: null,
+  };
 }

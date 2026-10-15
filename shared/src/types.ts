@@ -16,12 +16,11 @@ export const LAYER_INFO: Record<LayerId, { name: string; sub: string }> = {
 };
 
 /**
- * Noise the reviewer can hide. "generated" is always out of bounds (lockfiles, schema dumps,
- * snapshots, files headed "do not edit"); the other three are filters the reviewer toggles.
+ * What makes a file noise. "generated" (lockfiles, schema dumps, snapshots, files headed "do not
+ * edit") and "api" (generated API clients) are out of bounds and never stops; tests and
+ * translations stay on the course.
  */
-export const FILTERS = ["tests", "i18n", "api"] as const;
-export type FilterId = (typeof FILTERS)[number];
-export type NoiseKind = FilterId | "generated";
+export type NoiseKind = "tests" | "i18n" | "api" | "generated";
 
 export type FileStatus = "added" | "modified" | "removed" | "renamed" | "copied" | "changed" | "unchanged";
 
@@ -100,28 +99,64 @@ export interface Analysis {
   createdAt: string;
 }
 
-export interface FileNotes {
-  what?: string;
-  why?: string;
+/** One stop: lines `from` to `to` (inclusive indices into `hunk.lines`) of one changed chunk. */
+export interface Stop {
+  hunkId: string;
+  from: number;
+  to: number;
+  /** The chunk is in a test file, or the stop is a single test cropped out of it. */
+  test: boolean;
+  /** Set when the stop is one test cropped out of its chunk; absent for the whole chunk. */
+  name?: string;
 }
 
-/** What the agent contributes: order and words. Never relationships without evidence. */
+export interface Goal {
+  /** Slug of the title, made unique by the server. Reviewed marks are keyed by it. */
+  id: string;
+  title: string;
+  /** Ticket id such as "E-51", or "PR". */
+  src: string;
+  /** The verbatim words the goal came from. */
+  quote: string;
+  /** Reading order: code, then boilerplate, then tests. */
+  stops: Stop[];
+  /** Said when no test proves the goal. */
+  gap?: string;
+}
+
+export interface LineNote {
+  side: "LEFT" | "RIGHT";
+  line: number;
+  text: string;
+}
+
+export interface ChunkNotes {
+  summary: string;
+  lines: LineNote[];
+}
+
+/** What the agent contributes: goals, the chunks that serve them, and words. */
 export interface Course {
-  route: string;
-  order: string[];
-  files: Record<string, FileNotes>;
-  hunks: Record<string, string>;
+  sentence: string;
+  goals: Goal[];
+  /** On-course chunks no goal cites: the "Changes no goal asked for" stop. */
+  unclaimed: Stop[];
+  notes: Record<string, ChunkNotes>;
 }
 
 export interface Review {
+  /** 2 is the goal-based course; a published review without it is the old file-based format. */
+  version: 2;
   analysis: Analysis;
   course: Course;
   /** Agent-proposed links that passed the evidence check. */
   agentLinks: Link[];
-  /** True when no agent course was published and the order is the server's default. */
+  /** True when no agent course was published. */
   defaultCourse: boolean;
   warnings: string[];
   publishedAt: string | null;
+  /** Set when the stored review is in the old format and must be republished. */
+  outdated?: boolean;
 }
 
 export type Verdict = "COMMENT" | "APPROVE" | "REQUEST_CHANGES";
@@ -137,14 +172,11 @@ export interface Draft {
   createdAt: string;
 }
 
-export interface Punch {
-  at: string;
-  /** Time spent on the file before punching, when the reviewer punched the current file. */
-  splitMs: number | null;
-}
-
 export interface ReviewState {
-  punched: Record<string, Punch>;
+  /** Stop key (hunk id, or `hunkId@from` for a crop) to when it was read. */
+  read: Record<string, string>;
+  /** Goal id to when it was marked reviewed. */
+  reviewed: Record<string, string>;
   drafts: Draft[];
   verdict: Verdict;
   summary: string;
@@ -152,7 +184,8 @@ export interface ReviewState {
 }
 
 export const emptyState = (): ReviewState => ({
-  punched: {},
+  read: {},
+  reviewed: {},
   drafts: [],
   verdict: "COMMENT",
   summary: "",

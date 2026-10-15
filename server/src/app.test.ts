@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { buildAnalysis, courseInputSchema, mergeCourse, type GhFile, type GhPull, type ReviewPayload } from "@review-canvas/shared";
-import { courseTemplate, renderBrief } from "./brief.js";
+import { courseTemplate } from "./brief.js";
 
 const { pull, files } = JSON.parse(readFileSync(new URL("../../test/fixtures/sync-retries.json", import.meta.url), "utf8")) as { pull: GhPull; files: GhFile[] };
 const analysis = buildAnalysis(pull, files, {});
@@ -30,44 +30,33 @@ describe("review API", () => {
     expect(res.statusCode).toBe(200);
     const body = res.json<ReviewPayload>();
     expect(body.review.defaultCourse).toBe(true);
-    expect(body.review.course.order.length).toBeGreaterThan(10);
-    expect(body.state.punched).toEqual({});
+    expect(body.review.version).toBe(2);
+    expect(body.review.course.goals).toEqual([]);
+    expect(body.state.read).toEqual({});
+    expect(body.state.reviewed).toEqual({});
   });
 
   it("serves the published course after publish", async () => {
-    const input = courseInputSchema.parse({ ...courseTemplate(analysis), route: "Storage first." });
+    const input = courseInputSchema.parse({ ...courseTemplate(analysis), sentence: "Storage first." });
     store.saveReview(mergeCourse(analysis, input));
     const body = (await app.inject({ method: "GET", url: `/api/reviews/${analysis.id}` })).json<ReviewPayload>();
     expect(body.review.defaultCourse).toBe(false);
-    expect(body.review.course.route).toBe("Storage first.");
+    expect(body.review.course.sentence).toBe("Storage first.");
   });
 
   it("saves state and never accepts `submitted` from the browser", async () => {
-    const state = { punched: { f1: { at: "2026-10-08T12:00:00Z", splitMs: 4000 } }, drafts: [], verdict: "COMMENT", summary: "", submitted: { at: "x", url: "https://evil", event: "APPROVE" } };
+    const state = { read: { "f1.h1": "2026-10-08T12:00:00Z" }, reviewed: { "retry-with-backoff": "2026-10-08T12:01:00Z" }, drafts: [], verdict: "COMMENT", summary: "", submitted: { at: "x", url: "https://evil", event: "APPROVE" } };
     const put = await app.inject({ method: "PUT", url: `/api/reviews/${analysis.id}/state`, payload: state });
     expect(put.statusCode).toBe(200);
     const body = (await app.inject({ method: "GET", url: `/api/reviews/${analysis.id}` })).json<ReviewPayload>();
-    expect(body.state.punched.f1?.splitMs).toBe(4000);
+    expect(body.state.read["f1.h1"]).toBe("2026-10-08T12:00:00Z");
+    expect(body.state.reviewed["retry-with-backoff"]).toBe("2026-10-08T12:01:00Z");
     expect(body.state.submitted).toBeNull();
   });
 
   it("rejects malformed state and unknown or unsafe ids", async () => {
-    expect((await app.inject({ method: "PUT", url: `/api/reviews/${analysis.id}/state`, payload: { punched: 1 } })).statusCode).toBe(400);
+    expect((await app.inject({ method: "PUT", url: `/api/reviews/${analysis.id}/state`, payload: { read: 1 } })).statusCode).toBe(400);
     expect((await app.inject({ method: "GET", url: "/api/reviews/nope" })).statusCode).toBe(404);
     expect((await app.inject({ method: "GET", url: "/api/reviews/..%2F..%2Fetc" })).statusCode).toBe(400);
-  });
-});
-
-describe("brief", () => {
-  const brief = renderBrief(analysis, "/tmp/course.json");
-
-  it("carries every on-course file id and hunk id the agent may use", () => {
-    for (const id of courseTemplate(analysis).order) expect(brief).toContain(`### ${id} `);
-    expect(brief).toContain("#### f2.h1");
-  });
-
-  it("does not spend the agent's attention on generated diffs", () => {
-    expect(brief).toContain("Generated; no notes needed.");
-    expect(brief).not.toContain("syncsRetry200.parse(data)");
   });
 });

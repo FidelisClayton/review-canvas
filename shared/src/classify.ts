@@ -1,4 +1,6 @@
-import type { FilterId, LayerId, NoiseKind } from "./types.js";
+import type { LayerId, NoiseKind } from "./types.js";
+
+type FilterId = Exclude<NoiseKind, "generated">;
 
 // Layer and noise rules are plain path patterns so the reviewer can read them in the UI and so
 // the same file always lands in the same place. Content checks (generated-file headers) live

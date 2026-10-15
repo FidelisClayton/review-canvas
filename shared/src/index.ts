@@ -5,5 +5,5 @@ export * from "./classify.js";
 export * from "./links.js";
 export * from "./analysis.js";
 export * from "./course.js";
-export * from "./layout.js";
+export * from "./crop.js";
 export * from "./view.js";

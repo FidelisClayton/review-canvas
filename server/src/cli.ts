@@ -2,7 +2,7 @@
 import { spawn, execFileSync } from "node:child_process";
 import { existsSync, mkdirSync, openSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import { buildAnalysis, courseInputSchema, mergeCourse, type GhFile, type GhPull } from "@review-canvas/shared";
+import { buildAnalysis, courseInputSchema, mergeCourse, onCourse, type GhFile, type GhPull } from "@review-canvas/shared";
 import { buildApp } from "./app.js";
 import { courseTemplate, renderBrief } from "./brief.js";
 import { baseUrl, home, port, readConfig, reviewUrl, writeConfig } from "./config.js";
@@ -110,10 +110,10 @@ async function main(argv: string[]) {
     case "prepare": {
       if (!args[0]) throw new Error("Usage: review-canvas prepare <pr-url>");
       const { analysis, coursePath, briefPath } = await prepare(args[0]);
-      const onCourse = analysis.files.filter((f) => f.noise !== "generated").length;
+      const onCourseCount = analysis.files.filter(onCourse).length;
       console.log(`Review id: ${analysis.id}`);
       console.log(`PR: ${analysis.pr.owner}/${analysis.pr.repo}#${analysis.pr.number} ${analysis.pr.title}`);
-      console.log(`Files: ${analysis.files.length} (${onCourse} on the course), static links: ${analysis.links.length}`);
+      console.log(`Files: ${analysis.files.length} (${onCourseCount} on the course), static links: ${analysis.links.length}`);
       console.log(`Brief (read this): ${briefPath}`);
       console.log(`Course (edit this): ${coursePath}`);
       console.log(`Then run: review-canvas publish ${analysis.id}`);
@@ -124,7 +124,8 @@ async function main(argv: string[]) {
       const review = publish(args[0], args[1]);
       await up();
       for (const w of review.warnings) console.log(`warning: ${w}`);
-      console.log(`Published ${review.course.order.length} files, ${review.agentLinks.length} agent link(s) accepted.`);
+      const stops = review.course.goals.reduce((n, g) => n + g.stops.length, 0);
+      console.log(`Published ${review.course.goals.length} goal(s), ${stops} stop(s), ${review.course.unclaimed.length} unclaimed, ${review.agentLinks.length} agent link(s) accepted.`);
       console.log(`Open: ${reviewUrl(review.analysis.id)}`);
       return;
     }
