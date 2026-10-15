@@ -1,4 +1,4 @@
-import { mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
@@ -58,5 +58,49 @@ describe("review API", () => {
     expect((await app.inject({ method: "PUT", url: `/api/reviews/${analysis.id}/state`, payload: { read: 1 } })).statusCode).toBe(400);
     expect((await app.inject({ method: "GET", url: "/api/reviews/nope" })).statusCode).toBe(404);
     expect((await app.inject({ method: "GET", url: "/api/reviews/..%2F..%2Fetc" })).statusCode).toBe(400);
+  });
+
+  it("opens a review published in the old file-based format as outdated", async () => {
+    const old = { ...analysis, id: "old-format" };
+    store.saveAnalysis(old);
+    writeFileSync(store.reviewPath(old.id, "review.json"), JSON.stringify({ analysis: old, course: { order: [] }, publishedAt: "2026-10-01T00:00:00Z" }));
+    const body = (await app.inject({ method: "GET", url: `/api/reviews/${old.id}` })).json<ReviewPayload>();
+    expect(body.review.outdated).toBe(true);
+    expect(body.review.course.goals).toEqual([]);
+    expect((await app.inject({ method: "GET", url: "/api/reviews" })).statusCode).toBe(200);
+  });
+
+  it("loads a legacy state.json with `punched` as unread", async () => {
+    const legacy = { ...analysis, id: "legacy-state" };
+    store.saveAnalysis(legacy);
+    writeFileSync(store.reviewPath(legacy.id, "state.json"), JSON.stringify({ punched: { f1: "2026-10-01T00:00:00Z" }, drafts: [], verdict: "COMMENT", summary: "", submitted: null }));
+    const { state } = (await app.inject({ method: "GET", url: `/api/reviews/${legacy.id}` })).json<ReviewPayload>();
+    expect(state).toEqual({ read: {}, reviewed: {}, drafts: [], verdict: "COMMENT", summary: "", submitted: null });
+  });
+});
+
+describe("head files", () => {
+  const url = (fileId: string) => `/api/reviews/${analysis.id}/files/${fileId}`;
+
+  it("returns 404 for a file that is not in the PR", async () => {
+    const res = await app.inject({ method: "GET", url: url("nope") });
+    expect(res.statusCode).toBe(404);
+  });
+
+  it("returns 404 with a message for a removed file", async () => {
+    const removed = { ...analysis, id: "with-removed", files: analysis.files.map((f, i) => (i === 0 ? { ...f, status: "removed" as const } : f)) };
+    store.saveAnalysis(removed);
+    const res = await app.inject({ method: "GET", url: `/api/reviews/${removed.id}/files/${removed.files[0]!.id}` });
+    expect(res.statusCode).toBe(404);
+    expect(res.json<{ error: string }>().error).toBe("File removed in this PR.");
+  });
+
+  it("serves a cached file without calling gh", async () => {
+    const file = analysis.files[0]!;
+    mkdirSync(join(store.reviewPath(analysis.id, "heads")), { recursive: true });
+    writeFileSync(store.reviewPath(analysis.id, `heads/${file.id}.txt`), "line one\nline two\n");
+    const res = await app.inject({ method: "GET", url: url(file.id) });
+    expect(res.statusCode).toBe(200);
+    expect(res.json()).toEqual({ path: file.path, lines: ["line one", "line two"] });
   });
 });

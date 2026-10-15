@@ -7,7 +7,7 @@ import { buildApp } from "./app.js";
 import { courseTemplate, renderBrief } from "./brief.js";
 import { baseUrl, home, port, readConfig, reviewUrl, writeConfig } from "./config.js";
 import { fetchFileAt, fetchFiles, fetchHeads, fetchPull, GhError, parsePrRef } from "./github.js";
-import { loadAnalysis, reviewPath, saveAnalysis, saveReview } from "./store.js";
+import { loadAnalysis, reviewPath, saveAnalysis, saveHeadFile, saveReview } from "./store.js";
 
 const USAGE = `review-canvas: review a pull request on an infinite canvas
 
@@ -37,8 +37,10 @@ async function prepare(input: string) {
   const coursePath = reviewPath(analysis.id, "course.json");
   const briefPath = reviewPath(analysis.id, "brief.md");
   // The id includes the head commit, so an existing course was planned against this same code:
-  // keep the agent's work instead of resetting it to the template.
-  if (!existsSync(coursePath)) writeFileSync(coursePath, JSON.stringify(courseTemplate(analysis), null, 2) + "\n");
+  // keep the agent's work instead of resetting it to the template. A course without `goals` is the
+  // old file-based format, so it is replaced.
+  const existing = existsSync(coursePath) ? (JSON.parse(readFileSync(coursePath, "utf8")) as { goals?: unknown }) : null;
+  if (!existing?.goals) writeFileSync(coursePath, JSON.stringify(courseTemplate(analysis), null, 2) + "\n");
   writeFileSync(briefPath, renderBrief(analysis, coursePath));
   return { analysis, coursePath, briefPath };
 }
@@ -142,6 +144,9 @@ async function main(argv: string[]) {
       const analysis = buildAnalysis(pull, files, {});
       saveAnalysis(analysis);
       const review = publish(analysis.id, fileURLToPath(new URL("sync-retries.course.json", root)));
+      // Seed the head-file cache so Open file and Show more work without `gh`.
+      const heads = JSON.parse(readFileSync(new URL("sync-retries.heads.json", root), "utf8")) as Record<string, string>;
+      for (const f of analysis.files) if (heads[f.path] !== undefined) saveHeadFile(analysis.id, f.id, heads[f.path]!);
       await up();
       for (const w of review.warnings) console.log(`warning: ${w}`);
       console.log(`Open: ${reviewUrl(analysis.id)}`);

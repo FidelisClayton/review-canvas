@@ -4,8 +4,8 @@ import fastifyStatic from "@fastify/static";
 import Fastify, { type FastifyInstance } from "fastify";
 import { stateInputSchema, submitInputSchema, type ReviewPayload } from "@review-canvas/shared";
 import { webDist } from "./config.js";
-import { GhError, submitReview } from "./github.js";
-import { listReviews, loadReview, loadState, saveState } from "./store.js";
+import { fetchFileAt, GhError, submitReview } from "./github.js";
+import { loadAnalysis, listReviews, loadHeadFile, loadReview, loadState, saveHeadFile, saveState } from "./store.js";
 
 const SAFE_ID = /^[A-Za-z0-9._-]+$/;
 
@@ -23,6 +23,28 @@ export async function buildApp(opts: { logger?: boolean } = {}): Promise<Fastify
     if (!review) return reply.code(404).send({ error: `No review called ${id}. Run the review-canvas skill on the PR first.` });
     const payload: ReviewPayload = { review, state: loadState(id) };
     return payload;
+  });
+
+  // Only files of the PR are served, so the reviewer's `gh` login cannot be used to read other paths.
+  app.get<{ Params: { id: string; fileId: string } }>("/api/reviews/:id/files/:fileId", async (req, reply) => {
+    const { id, fileId } = req.params;
+    if (!SAFE_ID.test(id) || !SAFE_ID.test(fileId)) return reply.code(400).send({ error: "Invalid id." });
+    const analysis = loadAnalysis(id);
+    const file = analysis?.files.find((f) => f.id === fileId);
+    if (!analysis || !file) return reply.code(404).send({ error: "No such file in this review." });
+    if (file.status === "removed") return reply.code(404).send({ error: "File removed in this PR." });
+    let text = loadHeadFile(id, fileId);
+    if (text === null) {
+      try {
+        text = await fetchFileAt(analysis.pr, analysis.pr.headSha, file.path);
+      } catch (e) {
+        return reply.code(502).send({ error: e instanceof GhError ? e.message : "Could not fetch the file from GitHub." });
+      }
+      saveHeadFile(id, fileId, text);
+    }
+    const lines = text.split("\n");
+    if (lines.at(-1) === "") lines.pop();
+    return { path: file.path, lines };
   });
 
   app.put<{ Params: { id: string } }>("/api/reviews/:id/state", async (req, reply) => {

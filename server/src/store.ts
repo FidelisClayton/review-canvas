@@ -42,12 +42,44 @@ export function saveReview(review: Review) {
 /** The published review, or the server's default course when no agent has published yet. */
 export function loadReview(id: string): Review | null {
   const published = readJson<Review>(join(dir(id), "review.json"));
-  if (published) return published;
-  const analysis = loadAnalysis(id);
-  return analysis ? draftReview(analysis) : null;
+  if (published?.version === 2) return published;
+  const analysis = loadAnalysis(id) ?? published?.analysis;
+  if (!analysis) return null;
+  // A review published in the old file-based format has no goals; the web app asks for a republish.
+  return { ...draftReview(analysis), ...(published ? { outdated: true } : {}) };
 }
 
-export const loadState = (id: string): ReviewState => ({ ...emptyState(), ...(readJson<ReviewState>(join(dir(id), "state.json")) ?? {}) });
+/** Only the v2 keys are read, so a state.json from before (with `punched`) loads as unread. */
+export function loadState(id: string): ReviewState {
+  const s = readJson<Partial<ReviewState>>(join(dir(id), "state.json")) ?? {};
+  const d = emptyState();
+  return {
+    read: s.read ?? d.read,
+    reviewed: s.reviewed ?? d.reviewed,
+    drafts: s.drafts ?? d.drafts,
+    verdict: s.verdict ?? d.verdict,
+    summary: s.summary ?? d.summary,
+    submitted: s.submitted ?? d.submitted,
+  };
+}
+
+/** A file's text at the PR head, cached by file id after the first fetch. */
+export function loadHeadFile(id: string, fileId: string): string | null {
+  try {
+    return readFileSync(join(dir(id), "heads", `${fileId}.txt`), "utf8");
+  } catch {
+    return null;
+  }
+}
+
+export function saveHeadFile(id: string, fileId: string, text: string) {
+  if (!SAFE_ID.test(fileId)) throw new Error(`Invalid file id "${fileId}".`);
+  mkdirSync(join(dir(id), "heads"), { recursive: true });
+  const path = join(dir(id), "heads", `${fileId}.txt`);
+  const tmp = `${path}.${process.pid}.tmp`;
+  writeFileSync(tmp, text);
+  renameSync(tmp, path);
+}
 
 export function saveState(id: string, state: ReviewState) {
   mkdirSync(dir(id), { recursive: true });
