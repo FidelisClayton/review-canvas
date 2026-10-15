@@ -61,8 +61,8 @@ describe("brief", () => {
       "The test for every line note: cover the note and read the line. If the line already says it, delete\n  the note.",
       "Never on lines that only open or close structure: `class`, `def`, `do`, `end`, braces,\n  imports, blank lines.",
       "A chunk may carry several line notes when that helps; most chunks carry none.",
-      "Imperative, commit-subject style, ≤ 60 chars, backticks around identifiers, no reasoning.",
-      "At most 3 notes per chunk in total, summary included. Never repeat the same thing in the summary\n  and a line note.",
+      "Imperative, commit-subject style, aim for ≤ 60 chars (the schema allows 200), backticks around\n  identifiers, no reasoning.",
+      "At most 3 line notes per chunk; the summary is separate.",
     ]) expect(brief).toContain(rule);
   });
 

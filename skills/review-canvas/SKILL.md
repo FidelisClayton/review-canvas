@@ -28,14 +28,15 @@ the code. You do the judgement: the goals, the stops, and short notes on each ch
 
 3. **Find the goals, then fill in the course** (`course.json`, pre-filled with a summary slot for
    every chunk on the course and no goals). Look for a ticket id in the PR title, branch name or
-   description (pattern `[A-Za-z]+-\d+`, matched case-insensitively; `user/e-51-title` holds
+   description (pattern `\b[A-Za-z]+-\d+\b`, matched case-insensitively; `user/e-51-title` holds
    `E-51`). Upper-case it and read the ticket with the Linear MCP `get_issue` tool when you have
-   it. With no id, or no Linear, take the goals from the PR description and use `PR` as each
+   it; try every match (branch, then title, then description) until `get_issue` finds one. With no id, or no Linear, take the goals from the PR description and use `PR` as each
    goal's `src`. The brief's "Your job" section is the full rulebook: one goal per acceptance
    criterion with its verbatim quote, stops in reading order (code, boilerplate, tests), the rule
    to cite a chunk only when the goal's quote needs it, crops (`f3.h1@test name`), gap sentences,
-   the `unclaimed` list, chunk summaries (≤ 90 chars, every chunk), sparse line notes (≤ 60
-   chars, at most 3 notes per chunk including the summary) and the evidence rule for extra
+   the `unclaimed` list (list every chunk you left uncited on purpose), chunk summaries (≤ 90
+   chars, every chunk), sparse line notes (aim for ≤ 60 chars; at most 3 line notes per chunk, the
+   summary is separate) and the evidence rule for extra
    `links`. Follow it. Its two commands, `review-canvas show` and `review-canvas cat`, let you
    read past the diff without a checkout.
 
@@ -47,7 +48,8 @@ the code. You do the judgement: the goals, the stops, and short notes on each ch
 
    It checks the course against the analysis, repairs what it can, prints a warning for each repair,
    starts the server if needed, and prints the URL. Unknown chunk ids, crops that match no test or
-   several, chunks no goal cited, dropped line notes and goals with no stops or gap all warn: fix
+   several, chunks neither cited by a goal nor listed in `unclaimed`, chunks with no summary, goals
+   with an empty `quote` or `src`, dropped line notes and goals with no stops or gap all warn: fix
    `course.json` and publish again. Over-long summaries or notes are errors and block publishing
    until fixed.
 

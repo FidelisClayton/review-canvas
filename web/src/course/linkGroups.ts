@@ -18,6 +18,7 @@ export interface LinkGroupsOf {
 
 /** More entries than this collapse into a count button. */
 export const COLLAPSE_OVER = 3;
+export const collapses = (count: number) => count > COLLAPSE_OVER;
 
 /** Uses: this chunk refers to the other. Tested by: a test file refers to this chunk. Used by: any other chunk refers to it. */
 export function linkGroups(view: ReviewView, hunkId: string): LinkGroupsOf {

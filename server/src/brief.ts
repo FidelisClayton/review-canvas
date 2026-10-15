@@ -33,7 +33,7 @@ function hunkBlock(f: PrFile, full: boolean, reviewId: string) {
 }
 
 /** Ticket ids in a title, branch or body: `user/e-51-title` holds `E-51`. Matched without regard to case. */
-export const TICKET_ID = /[A-Za-z]+-\d+/;
+export const TICKET_ID = /\b[A-Za-z]+-\d+\b/;
 
 const jobSection = (reviewId: string, coursePath: string, headRef: string) => `## Your job
 
@@ -44,7 +44,9 @@ summary slot for every chunk on the course and no goals yet), then publish it.
 
 The goals are what the work was asked to do. Look for a ticket id in the PR title, the branch name
 (\`${headRef}\`) and the PR description. The pattern is \`${TICKET_ID.source}\`, matched
-case-insensitively: \`user/e-51-title\` holds ticket \`E-51\`. Upper-case it before you use it.
+case-insensitively: \`user/e-51-title\` holds ticket \`E-51\`. Upper-case it before you use it. Collect
+every match, branch first, then title, then description, and try each with \`get_issue\` until one
+finds a ticket (a match such as \`utf-8\` or \`step-2\` is not one).
 
 - If the Linear MCP is available, call \`get_issue\` with that id and read the ticket: its title,
   description and acceptance criteria. Use the id, upper-cased, as each goal's \`src\`.
@@ -65,8 +67,8 @@ its heading below). Several goals can cite the same chunk.
 
 Cite a chunk on a goal only when the goal's quote needs that change. When unsure, leave it uncited:
 it lands in "Changes no goal asked for", which is where a reviewer looks for scope creep. List the
-chunks you know no goal asked for in \`unclaimed\`; chunks nobody cites are added there anyway, with
-a warning.
+chunks you know no goal asked for in \`unclaimed\`, including each one you left uncited on purpose.
+A chunk that is on the course, cited by no goal and not listed there is added anyway, with a warning.
 
 - Good: goal "Failed syncs can be retried from the admin" cites \`f18.h1\` (the \`retry\` action) and
   \`f2.h2\` (\`retry!\`), because its quote needs both.
@@ -122,9 +124,10 @@ large PR. They can read code. A note must give them something the line itself do
   new column). Never on lines that only open or close structure: \`class\`, \`def\`, \`do\`, \`end\`, braces,
   imports, blank lines.
 - A chunk may carry several line notes when that helps; most chunks carry none.
-- Imperative, commit-subject style, ≤ 60 chars, backticks around identifiers, no reasoning.
-- At most 3 notes per chunk in total, summary included. Never repeat the same thing in the summary
-  and a line note.
+- Imperative, commit-subject style, aim for ≤ 60 chars (the schema allows 200), backticks around
+  identifiers, no reasoning.
+- At most 3 line notes per chunk; the summary is separate. Never repeat the same thing in the
+  summary and a line note.
 
 A line note is \`{"side": "RIGHT", "line": <line number in the file at head>, "text": "…"}\`. Use
 \`"side": "LEFT"\` with the old line number only for a note on a deleted line. A line that is not a
@@ -145,8 +148,9 @@ and publish again:
 - An unknown chunk id, or a stop in an out-of-bounds file, was dropped.
 - A crop that matches no test, or more than one, fell back to the whole chunk; the warning lists the
   test names found.
-- A chunk on the course that no goal cited was added to "Changes no goal asked for". Cite it if a
-  goal needs it, otherwise leave it.
+- A chunk on the course that no goal cited and \`unclaimed\` did not list was added to "Changes no
+  goal asked for". Cite it on a goal if the goal needs it, otherwise list it in \`unclaimed\`.
+- A chunk with no summary, or a goal with an empty \`quote\` or \`src\`, gets a warning: fill it in.
 - A line note on a line that is not in its chunk was dropped.
 - A goal with no stops and no \`gap\` was dropped.
 

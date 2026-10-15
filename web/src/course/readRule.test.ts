@@ -58,4 +58,30 @@ describe("read rule", () => {
   it("counts nothing while zoomed out", () => {
     expect(dwell(emptySeen(), [0, 200], 0, true).ranges).toEqual([]);
   });
+
+  it("makes a stop that leaves and returns dwell 300 ms again", () => {
+    let seen = sample(sample(emptySeen(), [0, 0.2], 0, false), [0, 0.2], 200, false); // 200 ms, not yet counted
+    seen = sample(seen, null, 250, false); // leaves the screen
+    seen = sample(seen, [0, 0.2], 400, false); // returns
+    seen = sample(seen, [0, 0.2], 600, false); // 200 ms since the return, 600 since the first look
+    expect(seen.ranges).toEqual([]);
+    seen = sample(seen, [0, 0.2], 700, false);
+    expect(seen.ranges).toEqual([[0, 0.2]]);
+  });
+
+  it("keeps what was read when the stop leaves", () => {
+    let seen = dwell(emptySeen(), [0, 0.3], 0);
+    seen = sample(seen, null, 500, false);
+    expect(seen.ranges).toEqual([[0, 0.3]]);
+    expect(seen.segs).toEqual([]);
+  });
+
+  it("adds up ranges across a zoom change when they are fractions of the height", () => {
+    // 30% seen at zoom 1 (300 of 1000 px), then the next 30% at zoom 2 (600 to 1200 of 2000 px): both are 0.3 of the stop.
+    let seen = dwell(emptySeen(), [0, 300 / 1000], 0);
+    expect(isReadEnough(seen, 1)).toBe(false);
+    seen = dwell(seen, [600 / 2000, 1200 / 2000], 1000);
+    expect(covered(seen.ranges)).toBeCloseTo(0.6);
+    expect(isReadEnough(seen, 1)).toBe(true);
+  });
 });

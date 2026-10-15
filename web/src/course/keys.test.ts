@@ -12,6 +12,11 @@ describe("keyAction", () => {
     expect(keyAction({ key: "J" }, none)).toBe("next-stop");
   });
 
+  it("ignores auto-repeat for x", () => {
+    expect(keyAction({ key: "x", repeat: true }, none)).toBeNull();
+    expect(keyAction({ key: "j", repeat: true }, none)).toBe("next-stop");
+  });
+
   it("maps nothing from a textarea, with modifiers, or for the zoom keys", () => {
     expect(keyAction({ key: "x", target: textarea }, none)).toBeNull();
     expect(keyAction({ key: "x", metaKey: true }, none)).toBeNull();

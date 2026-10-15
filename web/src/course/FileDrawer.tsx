@@ -1,7 +1,7 @@
 import { useEffect, useRef } from "react";
-import { highlight } from "../highlight";
 import { useCourse } from "./ctx";
 import { headRows } from "./headRows";
+import { DiffRow } from "./StopView";
 import { useHeadFile } from "./useHeadFile";
 import "./file.css";
 
@@ -51,11 +51,7 @@ export function FileDrawer({ fileId, onClose }: FileDrawerProps) {
           <div className="code">
             <div className="codein">
               {rows.map((r, i) => (
-                <div key={i} className={`ln ${r.kind}`}>
-                  <span className="no">{r.no}</span>
-                  <span className="sg">{r.kind === "add" ? "+" : r.kind === "del" ? "−" : " "}</span>
-                  <span className="tx" dangerouslySetInnerHTML={{ __html: highlight(r.text, file.lang) || " " }} />
-                </div>
+                <DiffRow key={i} kind={r.kind} no={r.no} text={r.text} lang={file.lang} />
               ))}
             </div>
           </div>

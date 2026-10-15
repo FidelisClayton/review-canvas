@@ -16,6 +16,29 @@ export function wordMatcher(symbols: string[] | undefined): RegExp | null {
   return list.length ? new RegExp(`(?<![\\w])(?:${list.map(escapeRe).join("|")})(?![\\w])`) : null;
 }
 
+export interface DiffRowProps {
+  kind: "add" | "del" | "ctx";
+  no: number | null;
+  text: string;
+  lang: string;
+  mark?: boolean;
+  /** Set only on rows that take a comment (diff lines of a stop); expanded and whole-file rows leave these out. */
+  hunkId?: string;
+  index?: number;
+  onClick?: () => void;
+}
+
+/** One code row: line number, +/- sign, highlighted text. The only place this markup lives. */
+export function DiffRow({ kind, no, text, lang, mark, hunkId, index, onClick }: DiffRowProps) {
+  return (
+    <div className={`ln ${kind}${mark ? " mark" : ""}`} data-h={hunkId} data-i={index} onClick={onClick}>
+      <span className="no">{no}</span>
+      <span className="sg">{kind === "add" ? "+" : kind === "del" ? "−" : " "}</span>
+      <span className="tx" dangerouslySetInnerHTML={{ __html: highlight(text, lang) || " " }} />
+    </div>
+  );
+}
+
 export type CodeMode = "stop" | "map" | "drawer";
 
 export interface CodeRowsProps {
@@ -45,11 +68,7 @@ export function CodeRows({ hunkId, from, to, mode, highlight: symbols }: CodeRow
     };
     rows.push(
       <div key={i}>
-        <div className={`ln ${line.kind}${marker?.test(line.text) ? " mark" : ""}`} data-h={hunkId} data-i={i} onClick={open}>
-          <span className="no">{no}</span>
-          <span className="sg">{line.kind === "add" ? "+" : line.kind === "del" ? "−" : " "}</span>
-          <span className="tx" dangerouslySetInnerHTML={{ __html: highlight(line.text, file.lang) || " " }} />
-        </div>
+        <DiffRow kind={line.kind} no={no} text={line.text} lang={file.lang} mark={!!marker?.test(line.text)} hunkId={hunkId} index={i} onClick={open} />
         {notes
           .filter((n) => (n.side === "LEFT" ? line.kind === "del" && line.oldNo === n.line : line.kind !== "del" && line.newNo === n.line))
           .map((n, k) => (

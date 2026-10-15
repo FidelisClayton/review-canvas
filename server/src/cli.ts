@@ -27,6 +27,14 @@ const USAGE = `review-canvas: review a pull request on an infinite canvas
                                           this machine's Tailscale name and runs \`tailscale serve\`.
 `;
 
+function readJson(path: string): unknown {
+  try {
+    return JSON.parse(readFileSync(path, "utf8"));
+  } catch (e) {
+    throw new Error(`${path} is not valid JSON: ${(e as Error).message}. Fix or delete it.`);
+  }
+}
+
 async function prepare(input: string) {
   const ref = parsePrRef(input);
   const pull = await fetchPull(ref);
@@ -39,7 +47,7 @@ async function prepare(input: string) {
   // The id includes the head commit, so an existing course was planned against this same code:
   // keep the agent's work instead of resetting it to the template. A course without `goals` is the
   // old file-based format, so it is replaced.
-  const existing = existsSync(coursePath) ? (JSON.parse(readFileSync(coursePath, "utf8")) as { goals?: unknown }) : null;
+  const existing = existsSync(coursePath) ? (readJson(coursePath) as { goals?: unknown } | null) : null;
   if (!existing?.goals) writeFileSync(coursePath, JSON.stringify(courseTemplate(analysis), null, 2) + "\n");
   writeFileSync(briefPath, renderBrief(analysis, coursePath));
   return { analysis, coursePath, briefPath };
@@ -91,7 +99,7 @@ async function stop() {
 function publish(id: string, path?: string) {
   const analysis = loadAnalysis(id);
   if (!analysis) throw new Error(`No analysis for ${id}. Run \`review-canvas prepare <pr-url>\` first.`);
-  const raw = JSON.parse(readFileSync(path ?? reviewPath(id, "course.json"), "utf8")) as unknown;
+  const raw = readJson(path ?? reviewPath(id, "course.json"));
   const parsed = courseInputSchema.safeParse(raw);
   if (!parsed.success) {
     throw new Error(`The course JSON is invalid:\n${parsed.error.issues.map((i) => `  ${i.path.join(".")}: ${i.message}`).join("\n")}`);
@@ -124,8 +132,8 @@ async function main(argv: string[]) {
     case "publish": {
       if (!args[0]) throw new Error("Usage: review-canvas publish <id> [course.json]");
       const review = publish(args[0], args[1]);
-      await up();
       for (const w of review.warnings) console.log(`warning: ${w}`);
+      await up();
       const stops = review.course.goals.reduce((n, g) => n + g.stops.length, 0);
       console.log(`Published ${review.course.goals.length} goal(s), ${stops} stop(s), ${review.course.unclaimed.length} unclaimed, ${review.agentLinks.length} agent link(s) accepted.`);
       console.log(`Open: ${reviewUrl(review.analysis.id)}`);
@@ -147,8 +155,8 @@ async function main(argv: string[]) {
       // Seed the head-file cache so Open file and Show more work without `gh`.
       const heads = JSON.parse(readFileSync(new URL("sync-retries.heads.json", root), "utf8")) as Record<string, string>;
       for (const f of analysis.files) if (heads[f.path] !== undefined) saveHeadFile(analysis.id, f.id, heads[f.path]!);
-      await up();
       for (const w of review.warnings) console.log(`warning: ${w}`);
+      await up();
       console.log(`Open: ${reviewUrl(analysis.id)}`);
       return;
     }

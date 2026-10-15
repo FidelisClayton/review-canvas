@@ -2,7 +2,7 @@ import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { buildAnalysis, buildView, draftReview, onCourse, type GhFile, type GhPull, type Link } from "@review-canvas/shared";
 import { wordMatcher } from "./StopView";
-import { COLLAPSE_OVER, linkGroups } from "./linkGroups";
+import { collapses, linkGroups } from "./linkGroups";
 
 const { pull, files } = JSON.parse(readFileSync(new URL("../../../test/fixtures/sync-retries.json", import.meta.url), "utf8")) as { pull: GhPull; files: GhFile[] };
 const analysis = buildAnalysis(pull, files, {});
@@ -33,8 +33,9 @@ describe("linkGroups", () => {
     expect(g.uses.at(-1)!.symbols).toEqual(["retry!", "record_failure!"]);
   });
 
-  it("collapses past the limit", () => {
-    expect(COLLAPSE_OVER).toBe(3);
+  it("collapses a group into a count button only past three entries", () => {
+    expect([0, 1, 3].map(collapses)).toEqual([false, false, false]);
+    expect([4, 9].map(collapses)).toEqual([true, true]);
   });
 });
 

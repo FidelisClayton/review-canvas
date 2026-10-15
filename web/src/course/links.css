@@ -6,7 +6,7 @@
 .chip b{font-weight:600}
 .chip span{color:var(--ink-2);font-family:var(--mono);font-size:11px}
 .chip:hover span,.chip[aria-pressed=true] span{color:#cfc9d3}
-.linklist{position:absolute;top:100%;left:78px;z-index:5;display:flex;flex-direction:column;align-items:flex-start;gap:4px;padding:8px;background:#fff;border:1px solid var(--ink);box-shadow:0 12px 24px -16px rgba(40,24,60,.5);max-height:260px;overflow:auto}
+.linklist{position:absolute;top:100%;left:78px;z-index:5;display:flex;flex-direction:column;align-items:flex-start;gap:4px;padding:8px;background:#fff;border:1px solid var(--ink);max-height:260px;overflow:auto}
 
 .drawer .oobtag{display:inline-block;margin-top:4px;font-family:var(--cond);font-weight:700;font-size:13px;letter-spacing:.05em;text-transform:uppercase;color:var(--ink-3);border:1px solid var(--ink-3);padding:0 6px}
 .markline{margin:4px 0 0;font-size:12.5px;color:var(--ink-2)}

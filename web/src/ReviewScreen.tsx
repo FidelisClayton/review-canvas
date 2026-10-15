@@ -136,6 +136,7 @@ function LoadedReview({ review, initial }: { review: Review; initial: ReviewStat
   // ---- navigation ----
   const go = useCallback(
     (gi: number, hunkId?: string) => {
+      if (!hasGoals) return;
       const goals = idx.goals;
       const ng = Math.max(-1, Math.min(goals.length - 1, gi));
       const si = hunkId && ng >= 0 ? goals[ng]!.stops.findIndex((x) => x.hunkId === hunkId) : -1;
@@ -145,7 +146,7 @@ function LoadedReview({ review, initial }: { review: Review; initial: ReviewStat
       setCourseOpen(false);
       requestScroll(false);
     },
-    [idx, requestScroll],
+    [idx, hasGoals, requestScroll],
   );
   const goToGoalId = useCallback(
     (goalId: string, hunkId: string) => {

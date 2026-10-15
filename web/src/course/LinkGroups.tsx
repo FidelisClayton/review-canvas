@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useCourse } from "./ctx";
-import { COLLAPSE_OVER, linkGroups, type LinkEntry } from "./linkGroups";
+import { collapses, linkGroups, type LinkEntry } from "./linkGroups";
 import { base } from "./model";
 import "./links.css";
 
@@ -23,7 +23,7 @@ function Chip({ e, onOpen }: { e: LinkEntry; onOpen: (e: LinkEntry) => void }) {
 function Group({ label, entries, onOpen }: { label: string; entries: LinkEntry[]; onOpen: (e: LinkEntry) => void }) {
   const [listed, setListed] = useState(false);
   if (!entries.length) return null;
-  const many = entries.length > COLLAPSE_OVER;
+  const many = collapses(entries.length);
   return (
     <div className="links">
       <span className="lk">{label}</span>

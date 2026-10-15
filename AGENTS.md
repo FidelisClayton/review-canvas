@@ -36,8 +36,9 @@
   Publish, brief and web all use it.
 - **Purple means the course, except agent notes.** Notes use the purple sparkle and gradient text
   on a light purple wash (`docs/DESIGN.md`). Gradient text appears nowhere else.
-- **Code rows render in one place.** `StopView.tsx` exports `CodeRows` with a `mode` (`guided`,
-  `map` or `drawer`); the Map view, the drawers and Show more render through it. Each `course/`
+- **Code rows render in one place.** `StopView.tsx` exports `CodeRows` with a `mode` (`stop`,
+  `map` or `drawer`); the Map view and the chunk drawer render through it. Every code row, in
+  `CodeRows`, Show more and the file drawer, is a `DiffRow` from the same file. Each `course/`
   module imports its own CSS, and `web/src/styles.css` stays with the shell.
 - **Real PR data from private repositories never goes into this repo.** Tests use the synthetic
   `test/fixtures/sync-retries.json`.

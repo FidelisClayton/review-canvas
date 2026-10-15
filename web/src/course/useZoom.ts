@@ -154,7 +154,10 @@ export function useZoom(scrollerRef: RefObject<HTMLElement | null>, worldRef: Re
 
     const onKeyDown = (e: KeyboardEvent) => {
       if (e.key !== " " || isTextField(e.target)) return;
-      e.preventDefault(); // Space must not press a focused button
+      // Space scrolls the page when nothing is focused; stop that, but let it press a focused button or follow a link.
+      const t = e.target;
+      const idle = t === document.body || (t instanceof HTMLElement && vp.contains(t) && !t.closest("button,a,summary,[role=button]"));
+      if (idle || pan) e.preventDefault();
       space = true;
       show();
     };
@@ -163,16 +166,21 @@ export function useZoom(scrollerRef: RefObject<HTMLElement | null>, worldRef: Re
       space = false;
       show();
     };
+    const onCancel = (e: PointerEvent) => {
+      moved = false;
+      onPointerUp(e);
+    };
     const onBlur = () => {
       space = false;
       pan = null;
+      moved = false;
       show();
     };
 
     vp.addEventListener("pointerdown", onPointerDown, true);
     vp.addEventListener("pointermove", onPointerMove);
     vp.addEventListener("pointerup", onPointerUp);
-    vp.addEventListener("pointercancel", onPointerUp);
+    vp.addEventListener("pointercancel", onCancel);
     vp.addEventListener("click", onClick, true);
     vp.style.touchAction = "pan-x pan-y";
     window.addEventListener("keydown", onKeyDown);
@@ -186,7 +194,7 @@ export function useZoom(scrollerRef: RefObject<HTMLElement | null>, worldRef: Re
       vp.removeEventListener("pointerdown", onPointerDown, true);
       vp.removeEventListener("pointermove", onPointerMove);
       vp.removeEventListener("pointerup", onPointerUp);
-      vp.removeEventListener("pointercancel", onPointerUp);
+      vp.removeEventListener("pointercancel", onCancel);
       vp.removeEventListener("click", onClick, true);
       window.removeEventListener("keydown", onKeyDown);
       window.removeEventListener("keyup", onKeyUp);

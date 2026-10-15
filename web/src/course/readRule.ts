@@ -1,6 +1,6 @@
-// The read rule (KTD7). A stop is read when the union of its pixel ranges that stayed on screen
-// for DWELL_MS covers at least half its height, at reading zoom. All numbers are screen pixels
-// measured from the stop's top edge.
+// The read rule (KTD7). A stop is read when the union of its ranges that stayed on screen
+// for DWELL_MS covers at least half its height, at reading zoom. Ranges are measured from the
+// stop's top edge in any one unit; the observer uses fractions of the stop's height (so the height is 1).
 
 export type Range = [number, number];
 export const DWELL_MS = 300;

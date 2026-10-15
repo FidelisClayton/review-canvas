@@ -1,12 +1,15 @@
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { buildAnalysis, courseInputSchema, mergeCourse, type GhFile, type GhPull, type ReviewPayload } from "@review-canvas/shared";
 import { courseTemplate } from "./brief.js";
 
 const { pull, files } = JSON.parse(readFileSync(new URL("../../test/fixtures/sync-retries.json", import.meta.url), "utf8")) as { pull: GhPull; files: GhFile[] };
 const analysis = buildAnalysis(pull, files, {});
+
+const fetchFileAt = vi.fn(async () => "from gh\n");
+vi.mock("./github.js", async (orig) => ({ ...(await orig<typeof import("./github.js")>()), fetchFileAt: (...a: unknown[]) => (fetchFileAt as (...x: unknown[]) => unknown)(...a) }));
 
 let dir: string;
 let app: Awaited<ReturnType<typeof import("./app.js").buildApp>>;
@@ -85,6 +88,7 @@ describe("head files", () => {
   it("returns 404 for a file that is not in the PR", async () => {
     const res = await app.inject({ method: "GET", url: url("nope") });
     expect(res.statusCode).toBe(404);
+    expect(fetchFileAt).not.toHaveBeenCalled();
   });
 
   it("returns 404 with a message for a removed file", async () => {
@@ -93,6 +97,7 @@ describe("head files", () => {
     const res = await app.inject({ method: "GET", url: `/api/reviews/${removed.id}/files/${removed.files[0]!.id}` });
     expect(res.statusCode).toBe(404);
     expect(res.json<{ error: string }>().error).toBe("File removed in this PR.");
+    expect(fetchFileAt).not.toHaveBeenCalled();
   });
 
   it("serves a cached file without calling gh", async () => {

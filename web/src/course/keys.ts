@@ -17,6 +17,7 @@ export interface KeyEventLike {
   metaKey?: boolean;
   ctrlKey?: boolean;
   altKey?: boolean;
+  repeat?: boolean;
   target?: EventTarget | { closest?: (selector: string) => unknown } | null;
 }
 
@@ -44,7 +45,7 @@ export function keyAction(e: KeyEventLike, ctx: KeyContext): KeyAction | null {
     case "[":
       return "prev-goal";
     case "x":
-      return "toggle-reviewed";
+      return e.repeat ? null : "toggle-reviewed"; // holding X must not flip the mark on and off
     case "f":
       return "toggle-overview";
     case "m":

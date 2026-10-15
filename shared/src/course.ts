@@ -57,6 +57,8 @@ export function mergeCourse(analysis: Analysis, input: CourseInput, now = new Da
     const kept = stops.filter((s) => s.name === undefined || !whole.has(s.hunkId));
     // Tests come last, in the order the agent gave them.
     const ordered = [...kept.filter((s) => !s.test), ...kept.filter((s) => s.test)];
+    const empty = [!g.quote && "quote", !g.src && "src"].filter(Boolean);
+    if (empty.length) warnings.push(`${where}: empty ${empty.join(" and ")}; give the ticket text verbatim and where it came from.`);
     if (!ordered.length && !g.gap) {
       warnings.push(`${where}: no stops and no gap sentence; the goal was dropped.`);
       continue;
@@ -106,6 +108,10 @@ export function mergeCourse(analysis: Analysis, input: CourseInput, now = new Da
       return false;
     });
     notes[id] = { summary: note.summary, lines };
+  }
+
+  for (const f of analysis.files.filter(onCourse)) {
+    for (const h of f.hunks) if (!notes[h.id]?.summary.trim()) warnings.push(`summary: ${h.id} (${f.path}) has no summary.`);
   }
 
   const course: Course = { sentence: input.sentence, goals, unclaimed, notes };

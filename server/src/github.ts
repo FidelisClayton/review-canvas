@@ -6,6 +6,9 @@ import { noiseOf, type GhFile, type GhPull, type Draft, type PrMeta, type Verdic
 
 export class GhError extends Error {}
 
+/** Encodes each path segment, so a `?`, `#` or `&` in a file name cannot change the query or the ref. */
+export const encodePath = (p: string) => p.split("/").map(encodeURIComponent).join("/");
+
 function gh(args: string[], input?: string): Promise<string> {
   return new Promise((resolve, reject) => {
     const child = spawn("gh", args, { stdio: ["pipe", "pipe", "pipe"] });
@@ -58,7 +61,7 @@ export async function fetchHeads(ref: PrRef, sha: string, files: GhFile[]): Prom
     while (next < todo.length) {
       const f = todo[next++]!;
       try {
-        const raw = await gh(["api", "-H", "Accept: application/vnd.github.raw", `repos/${ref.owner}/${ref.repo}/contents/${encodeURI(f.filename)}?ref=${sha}`]);
+        const raw = await gh(["api", "-H", "Accept: application/vnd.github.raw", `repos/${ref.owner}/${ref.repo}/contents/${encodePath(f.filename)}?ref=${sha}`]);
         heads[f.filename] = raw.slice(0, 1200);
       } catch {
         heads[f.filename] = null;
@@ -72,7 +75,7 @@ export async function fetchHeads(ref: PrRef, sha: string, files: GhFile[]): Prom
 
 /** A file's full text at a commit. */
 export function fetchFileAt(ref: PrRef, sha: string, path: string): Promise<string> {
-  return gh(["api", "-H", "Accept: application/vnd.github.raw", `repos/${ref.owner}/${ref.repo}/contents/${encodeURI(path)}?ref=${sha}`]);
+  return gh(["api", "-H", "Accept: application/vnd.github.raw", `repos/${ref.owner}/${ref.repo}/contents/${encodePath(path)}?ref=${sha}`]);
 }
 
 /** Posts one review with all draft comments. Only ever called from an explicit confirm in the UI. */

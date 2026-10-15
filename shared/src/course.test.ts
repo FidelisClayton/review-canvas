@@ -59,7 +59,20 @@ describe("mergeCourse stops", () => {
 
   it("does not warn about a chunk the agent listed as unclaimed", () => {
     const all = analysis.files.filter(onCourse).flatMap((f) => f.hunks.map((h) => h.id));
-    expect(merge([], { unclaimed: all }).warnings).toEqual([]);
+    const summaries = Object.fromEntries(all.map((id) => [id, { summary: "s" }]));
+    expect(merge([], { unclaimed: all, hunks: summaries }).warnings).toEqual([]);
+  });
+
+  it("warns once per on-course chunk with a missing or blank summary", () => {
+    const all = analysis.files.filter(onCourse).flatMap((f) => f.hunks.map((h) => h.id));
+    const hunks = Object.fromEntries(all.filter((id) => id !== "f2.h2").map((id) => [id, { summary: id === "f2.h1" ? "   " : "s" }]));
+    const w = merge([], { unclaimed: all, hunks }).warnings;
+    expect(w.filter((x) => x.startsWith("summary:"))).toEqual([expect.stringMatching(/^summary: f2\.h1 /), expect.stringMatching(/^summary: f2\.h2 /)]);
+  });
+
+  it("warns when a goal has an empty quote or src", () => {
+    const review = merge([goal("Bare", ["f2.h1"], { quote: "", src: "" })]);
+    expect(review.warnings.join("\n")).toMatch(/goals "Bare": empty quote and src/);
   });
 
   it("leaves a chunk a goal cites off unclaimed, with a warning", () => {
