@@ -8,7 +8,7 @@ web
 
 ## Stack
 
-npm workspaces: `shared` (pure TypeScript domain: diff parsing, layers, noise, static links, course merge, layout), `server` (Fastify + `gh` CLI, file-backed store, CLI), `web` (React + Vite). Node 22+.
+npm workspaces: `shared` (pure TypeScript domain: diff parsing, layers, noise, static links, crops, course merge), `server` (Fastify + `gh` CLI, file-backed store, CLI), `web` (React + Vite). Node 22+.
 
 ## Users
 
@@ -16,11 +16,11 @@ Primary: Clayton, a working engineer reviewing teammates' pull requests, often l
 
 ## Product Purpose
 
-The reviewer asks their coding agent (Claude Code or Codex) to review a PR with the `review-canvas` skill; the agent reads the PR and lays its changes out on an infinite canvas in the order and arrangement that makes the PR easiest to review. Success: the reviewer understands the change faster than in GitHub's alphabetical file list, misses less, and knows when they have reviewed everything.
+The reviewer asks their coding agent (Claude Code or Codex) to review a PR with the `review-canvas` skill; the agent reads the PR and its Linear ticket and turns the ticket's goals into a course: for each goal, the changed chunks that do it, ending with the tests that prove it. Success: the reviewer understands the change faster than in GitHub's alphabetical file list, sees which code and tests answer each goal, misses less, and knows when they have reviewed everything.
 
 ## Positioning
 
-GitHub orders files alphabetically. This tool orders and places changes by how the code actually flows, hunk by hunk, so the review follows the change's own structure.
+GitHub orders files alphabetically. This tool orders changes by what the ticket asked for, chunk by chunk, so the review follows the goals and the reviewer can check each one against its code and tests.
 
 ## Operating Context
 
@@ -31,17 +31,21 @@ GitHub orders files alphabetically. This tool orders and places changes by how t
 
 ## Capabilities and Constraints
 
-- Figma-like canvas: free pan and zoom, draggable frames, connectors.
-- Nodes are files. Each file connects to the next file to review (the review order).
-- Hunks inside a file can link to related hunks in other files (calls, authorizes, renders, tests).
-- Layout by layer, top to bottom, matching the reviewer's layer vocabulary.
-- Relationship edges (calls, renders, enqueues, tests) should come from static analysis, not LLM guesses; the LLM supplies grouping, order, and one-line summaries.
-- A numbered review path plus per-node reviewed state answers "did I review everything?".
-- Noise (lockfiles, generated code, pure renames) collapses into a skip cluster; tests sit beside the code they test.
-- Noise filters the reviewer can toggle: tests, translations (i18n), generated API clients (on by default). The filters are saved per browser and apply to every PR.
-- Zoom levels: summary cards when far, full diff when near.
+- The course is a list of goals taken from the PR's Linear ticket (acceptance criteria), falling back to the PR description. Each goal has a title, a source tag (ticket id or `PR`) and the quote it came from.
+- A goal is a sequence of chunk stops (one hunk each) with its tests last. A test stop can be a single test cropped out of a test chunk. A goal with no proving test shows a gap instead.
+- A final stop, "Changes no goal asked for", lists every changed chunk that no goal cites, so every on-course chunk appears somewhere on the course.
+- Two views over the same state: Guided walks one goal at a time, with the current goal's files at full strength, a route between them and the other goals faded; Map shows every changed file open, on its layer band.
+- Generated output (lockfiles, schema dumps) and generated API clients are out of bounds: never stops, listed in a collapsed band in the Map view with their reason and a Show diff toggle, and not counted toward progress. Translations stay on the course.
+- Each chunk header links to related changed chunks (Uses, Used by, Tested by). A link opens a side drawer with that chunk and the lines that mention the symbol highlighted. A file card's Open file shows the whole file at the PR head.
+- Code is syntax-highlighted, with "Show more" lines above and below taken from the file at the PR head.
+- Reading is automatic: a chunk is read once the parts of it seen on screen add up to at least half its height, each for at least 300 ms, at reading zoom. The same chunk in several goals counts once.
+- Marking a goal reviewed is the reviewer's own action (the Mark reviewed button or X) and is allowed with unread stops; the goal shows how many remain.
+- Agent notes: every on-course chunk has a summary of at most 90 characters, and a few line notes sit under lines that need one. They are shown in a distinct purple style so they read as the agent's voice.
+- Relationship links come from static analysis, not LLM guesses; the LLM supplies goals, stop order and notes.
+- Zoom by trackpad or touch pinch, and pan with Space+drag. Below about 60 percent, frames collapse to their titles.
+- A review with no agent (`review-canvas open`) opens in the Map view only. A review published in the older file-based format asks to be republished with the skill.
 - GitHub access goes through the `gh` CLI with the reviewer's own login; no tokens are stored.
-- The organizing agent is the reviewer's own Claude Code or Codex session, through a skill. The server never calls a model.
+- The organizing agent is the reviewer's own Claude Code or Codex session, through a skill. The server never calls a model or Linear.
 
 ## Evidence on Hand
 
@@ -49,8 +53,8 @@ The committed fixture (`test/fixtures/sync-retries.json`) is synthetic. Real PRs
 
 ## Product Principles
 
-1. The review order is the product; the canvas only presents it.
+1. The goals are the product; the canvas only presents them.
 2. Never show a relationship the code doesn't have.
-3. Completeness is visible: the reviewer always knows what's left.
+3. Completeness is visible: the reviewer always knows what's left, including changes no goal asked for.
 4. Nothing reaches GitHub without the reviewer's explicit go-ahead.
-5. Reading code stays linear inside a file node; the canvas arranges the reading, it doesn't replace it.
+5. Reading code stays linear inside a chunk; the course arranges the reading, it doesn't replace it.

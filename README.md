@@ -1,19 +1,29 @@
 # Review Canvas
 
-Review a pull request on an infinite canvas, file by file, in the order your coding agent
-planned.
+Review a pull request one goal at a time, with the chunks and tests that prove each goal, in the
+order your coding agent planned.
 
-Ask Claude Code or Codex to review a PR with the `review-canvas` skill. The agent plans the
-review and replies with a link. The canvas shows each file as a frame on a map:
+Ask Claude Code or Codex to review a PR with the `review-canvas` skill. The agent reads the PR
+and its Linear ticket (or the PR description when there is none), turns the ticket's goals into
+a course, and replies with a link. The page has two views over the same review:
 
-- a purple course runs from file to file in reading order;
-- dashed lines join hunks that refer to each other;
-- layer bands run top to bottom: data, domain, jobs, mail, HTTP, frontend;
-- tests sit under the code they cover, and generated files sit under their source;
-- noise (tests, translations, generated API clients) can be filtered out of the way.
+- **Guided** walks one goal at a time. Its chunks are stops in reading order, joined by a purple
+  route, with its tests last. A goal with no proving test shows a gap. A last stop, "Changes no
+  goal asked for", lists every changed chunk that no goal cites.
+- **Map** shows every changed file open on its layer band (data, domain, jobs, mail, HTTP,
+  frontend), with the goal numbers on each chunk. Generated output and generated API clients sit
+  in a collapsed "Out of bounds" band; translations stay on the course.
 
-You punch each file as you review it, draft comments on lines, and post one GitHub review when
-you are done.
+On either view:
+
+- each chunk has a short summary from the agent, and a few line notes where a line needs one;
+- link buttons (Uses, Used by, Tested by) open a side drawer with the related chunk and the
+  symbol highlighted, and Open file shows the whole file at the PR head;
+- code is syntax-highlighted, with Show more lines above and below, pinch zoom and Space+drag pan;
+- chunks count as read as you scroll past them, and you press Mark reviewed (or `X`) to finish a
+  goal.
+
+You draft comments on lines and post one GitHub review when you are done.
 
 ## How it works
 
@@ -24,10 +34,10 @@ flowchart TB
   prepare --> analysis["shared: buildAnalysis<br/>hunks · layers · noise · static links"]
   analysis --> brief["brief.md + course.json"]
   brief --> agent
-  agent -->|"edits order and notes,<br/>review-canvas publish &lt;id&gt;"| merge["shared: mergeCourse<br/>checks every id and link"]
+  agent -->|"reads the Linear ticket, writes goals, stops and notes,<br/>review-canvas publish &lt;id&gt;"| merge["shared: mergeCourse<br/>resolves crops, checks every id and link"]
   merge --> store["~/.local/share/review-canvas/reviews/&lt;id&gt;"]
   store --> api["server/src/app.ts<br/>GET /api/reviews/:id"]
-  api --> web["web: Canvas + course sheet"]
+  api --> web["web: Guided / Map + course sheet"]
   web -->|"Post review (after confirm)"| gh["gh api …/pulls/:n/reviews"]
   class prepare,merge,api controller
   class analysis,store model
@@ -41,11 +51,12 @@ The split is deliberate:
 
 - **The server is deterministic.** It parses hunks, assigns layers by path, classifies noise, and
   finds links only where the code shows them. A symbol defined in one hunk has to be used in
-  another hunk's changed lines.
-- **The agent supplies judgement.** It writes the reading order, the "What" and "Why here" notes
-  for each file, and one line per hunk. It may propose extra links, but each must name a symbol
-  that appears in both hunks. The server rejects any link that doesn't, so the map never shows a
-  relationship the code lacks.
+  another hunk's changed lines. At publish it checks every stop, every crop and every note, and
+  repairs or drops what doesn't match, with a warning.
+- **The agent supplies judgement.** It writes the goals, the chunk stops for each (tests last),
+  a summary of at most 90 characters for every chunk, and a few line notes. It may propose extra
+  links, but each must name a symbol that appears in both hunks. The server rejects any link that
+  doesn't, so the page never shows a relationship the code lacks.
 - **Nothing reaches GitHub without you.** Drafts stay local until you press Post review and
   confirm.
 
@@ -59,7 +70,7 @@ npm install
 npm run build
 npm run install:skill      # links the skill into ~/.agents, ~/.claude, ~/.codex and the CLI into ~/.local/bin
 review-canvas setup        # serve over Tailscale HTTPS; or: review-canvas setup --public-url http://localhost:4790
-review-canvas demo         # a synthetic PR with a planned course, to try the UI
+review-canvas demo         # a synthetic PR with a goal course, to try the UI
 ```
 
 Then, in Claude Code or Codex:
@@ -70,28 +81,29 @@ Then, in Claude Code or Codex:
 
 | Command | What it does |
 | --- | --- |
-| `review-canvas prepare <pr>` | Fetch and analyze a PR; write the brief and a pre-filled course JSON. |
-| `review-canvas publish <id> [course.json]` | Check the course, save it, start the server, print the URL. |
-| `review-canvas open <pr>` | Prepare and open in the default layer order, without an agent. |
+| `review-canvas prepare <pr>` | Fetch and analyze a PR; write the brief and a course JSON template. |
+| `review-canvas publish <id> [course.json]` | Check the course, save it, start the server, print the URL and any warnings. |
+| `review-canvas open <pr>` | Prepare and open in the Map view without goals, without an agent. |
 | `review-canvas demo` | Load the synthetic demo PR. |
 | `review-canvas up` · `stop` · `restart` · `serve` | Manage the server (port 4790, bound to 127.0.0.1). |
 | `review-canvas setup [--public-url URL]` | Choose the URL reviews open at. With no URL, uses `tailscale serve`. |
 
 ## Keyboard
 
-`N`/`P` next or previous file · `X` punch and move on · `F` whole course · `0` 100% ·
-`+`/`-` zoom · `Space`+drag pan · `⌘`/`Ctrl`+scroll zoom · `Esc` close panels.
+`J`/`K` next or previous stop · `]`/`[` next or previous goal · `X` mark the goal reviewed ·
+`F` whole course · `M` Map view · `G` Guided view · `Space`+drag pan · `⌘`/`Ctrl`+scroll or pinch
+zoom · `Esc` close the drawer, then the composer.
 
 ## Develop
 
 ```bash
 npm run dev        # shared watch + server (tsx) + web (vite, proxies /api to :4790)
-npm test           # vitest: parser, layers, noise, links, course merge, layout, API
+npm test           # vitest: parser, layers, noise, links, crops, course merge, API
 npm run typecheck
 ```
 
 - [`docs/PRODUCT.md`](docs/PRODUCT.md): who it is for and its principles.
-- [`docs/DESIGN.md`](docs/DESIGN.md): the orienteering-map visual system.
+- [`docs/DESIGN.md`](docs/DESIGN.md): the orienteering-map visual system, including the agent-note style.
 - [`AGENTS.md`](AGENTS.md): rules for working on this repo.
 
 The committed fixture in `test/fixtures/` is a synthetic PR. Never commit real PR content from
