@@ -12,3 +12,6 @@ artifacts/
 *.swp
 *.swo
 *~
+
+# Design drafts built from private PRs; never commit
+docs/review-ux-drafts/
