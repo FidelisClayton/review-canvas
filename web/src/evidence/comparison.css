@@ -1,0 +1,24 @@
+.evidence-comparison{min-inline-size:0}
+.evidence-comparison>p{margin-block:8px 16px}
+.comparison-mode{display:flex;flex-wrap:wrap;align-items:center;gap:8px;font-weight:600}
+.comparison-pair{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,24rem),1fr));gap:16px;align-items:start}
+.comparison-pair>*{min-inline-size:0}
+.comparison-pair .evidence-run-choice{margin-block:8px 16px}
+.comparison-identity{border-block-start:1px solid var(--rule);padding-block:0 8px}
+.comparison-identity p{margin-block:8px}
+.comparison-summary{border-block:1px solid var(--ink);padding-block:0 8px;margin-block:16px}
+.comparison-summary ul{padding-inline-start:24px}
+.comparison-observation{border-block-start:1px solid var(--rule);padding-block:4px 16px}
+.comparison-observation .comparison-pair h4{font-size:13px;color:var(--ink-2)}
+.comparison-observation .comparison-pair pre{margin-block-start:0}
+.comparison-paths{list-style:none;padding:0;margin-block:8px 16px;border-block-start:1px solid var(--rule)}
+.comparison-paths li{display:flex;flex-wrap:wrap;gap:8px 14px;align-items:baseline;padding-block:10px;border-block-end:1px solid var(--rule);min-inline-size:0}
+.comparison-paths .btn{block-size:auto;min-block-size:34px;white-space:normal;text-align:start;overflow-wrap:anywhere;max-inline-size:100%}
+.comparison-paths button[aria-pressed=true]{background:var(--purple-tint);border-color:var(--purple);color:var(--purple-ink)}
+.comparison-paths button:active{background:var(--rule-2)}
+.comparison-file{border-block-start:1px solid var(--ink);padding-block-start:4px}
+.comparison-file .evidence-source-code{max-block-size:55vh}
+.comparison-file .evidence-source-code .ln{cursor:text}
+.comparison-hunk h4{background:var(--paper);padding-block:8px;padding-inline:12px;margin-block-end:0;border:1px solid var(--rule)}
+.comparison-hunk .evidence-source-code{margin-block-start:0;border-block-start:0}
+.comparison-file .evidence-facts code,.comparison-identity code,.comparison-summary code{overflow-wrap:anywhere}
