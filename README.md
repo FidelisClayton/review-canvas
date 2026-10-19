@@ -3,6 +3,20 @@
 Review a pull request one goal at a time, with the chunks and test source that check each goal, in the
 order your coding agent planned.
 
+The screenshots below use the fictitious `acme/storefront` PR included with the demo.
+
+![Goals and reading order](docs/screenshots/review-goals.png)
+
+The agent groups the PR into goals and sets a reading order.
+
+![Guided review of changed code](docs/screenshots/guided-review.png)
+
+Follow a goal through changed code, with summaries and line notes.
+
+![Related test source](docs/screenshots/related-tests.png)
+
+Related test source appears under the same goal.
+
 Ask Claude Code or Codex to review a PR with the `review-canvas` skill. The agent reads the PR
 and its Linear ticket (or the PR description when there is none), turns the ticket's goals into
 a course, and replies with a link. The page has two views over the same review:
