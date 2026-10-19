@@ -8,7 +8,7 @@ export type JsonValue = null | boolean | number | string | JsonValue[] | {
 
 export const jsonValueSchema: z.ZodType<JsonValue> = z.lazy(() => z.union([z.null(), z.boolean(), z.number().finite(), z.string(), z.array(jsonValueSchema), z.record(z.string(), jsonValueSchema)]));
 
-export const safeIdSchema = z.string().min(1).max(200).regex(/^[A-Za-z0-9][A-Za-z0-9._-]*$/);
+export const safeIdSchema = z.string().min(1).max(200).regex(/^[A-Za-z0-9._-]+$/).refine(id => id !== "." && id !== "..");
 
 export const repositorySchema = z.object({ owner: safeIdSchema, repo: safeIdSchema });
 

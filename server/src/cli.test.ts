@@ -183,6 +183,21 @@ describe("CLI deployment and revisions", () => {
 });
 
 describe("prepare revision identity", () => {
+  it("prepares, publishes and imports evidence for .github without losing the brief", async () => {
+    const {out, bundle} = await record();
+    const pull = structuredClone(fixture.pull); pull.base.repo.name = ".github";
+    vi.mocked(github.fetchPull).mockResolvedValue(pull);
+    const {analysis: prepared, coursePath, briefPath} = await prepare("example/.github#42");
+    expect(prepared.id).toMatch(/^\.github-/);
+    expect(readFileSync(briefPath, "utf8")).toContain('"publishedEvidenceEndpoints"');
+    writeFileSync(coursePath, JSON.stringify({sentence: "Retry", goals: [{title: "Retry", src: "PR", quote: "Retry", stops: [], gap: "No source test"}]}));
+    expect(publish(prepared.id).analysis).toEqual(prepared);
+    bundle.target.repo = ".github";
+    writeFileSync(out, JSON.stringify(bundle));
+    await main(["evidence", "import", prepared.id, out]);
+    expect(getEvidenceRun(prepared.id, bundle.runId).bundle).toEqual(bundle);
+    expect(readFileSync(briefPath, "utf8")).toContain(bundle.runId);
+  });
   it("records the exact base and checks metadata after fetching files and heads", async () => {
     const legacyAnalysis = structuredClone(analysis);
     delete legacyAnalysis.pr.baseSha;

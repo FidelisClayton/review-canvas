@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { bindEvidenceGoals, canonicalJson, deriveFreshness, executionBundleSchema, resolveSourceRef, summarizeAssertions } from "./evidence.js";
+import { bindEvidenceGoals, canonicalJson, deriveFreshness, executionBundleSchema, resolveSourceRef, safeIdSchema, summarizeAssertions } from "./evidence.js";
 import { fixture } from "./fixture.test-helper.js";
 import { mergeCourse } from "./course.js";
 import { courseInputSchema } from "./schemas.js";
@@ -18,6 +18,12 @@ const run = () => ({
 });
 
 describe("recorded evidence", () => {
+  it.each([".github", "_repository", "-repository", ".github-42-abcdef0", "a".repeat(200)])("accepts supported ID %s", id => {
+    expect(safeIdSchema.parse(id)).toBe(id);
+  });
+  it.each(["", ".", "..", "../private", "a/b", "a\\b", "a\0b", "a:b", "a".repeat(201)])("rejects unsafe ID %j", id => {
+    expect(safeIdSchema.safeParse(id).success).toBe(false);
+  });
   it("sorts object keys recursively while retaining arrays", () => {
     expect(canonicalJson({ z: [2, 1], a: { z: null, a: true } })).toBe('{"a":{"a":true,"z":null},"z":[2,1]}');
   });

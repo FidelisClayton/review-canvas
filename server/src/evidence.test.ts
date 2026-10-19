@@ -3,8 +3,8 @@ import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { buildAnalysis, canonicalJson, draftReview, type ExecutionBundle, type GhFile, type GhPull } from "@review-canvas/shared";
-import { loadReview, loadState, reviewPath, saveAnalysis, saveReview } from "./store.js";
+import { buildAnalysis, canonicalJson, draftReview, emptyState, type ExecutionBundle, type GhFile, type GhPull } from "@review-canvas/shared";
+import { loadReview, loadState, reviewPath, saveAnalysis, saveReview, saveState } from "./store.js";
 import { compareEvidence, getDeployment, getEvidenceIndex, getEvidenceRun, getEvidenceSource, importDeployment, importEvidence } from "./evidence.js";
 import { buildApp } from "./app.js";
 const fixture = JSON.parse(readFileSync(new URL("../../test/fixtures/sync-retries.json", import.meta.url), "utf8")) as {pull: GhPull; files: GhFile[]};
@@ -101,6 +101,40 @@ describe("deployment and source boundaries", () => {
       expect((await app.inject(`${url}/revisions`)).json()).toMatchObject({baseline: null, comparison: null});
       expect((await app.inject(`${url}/evidence/..%2Fprivate`)).statusCode).toBe(400);
       expect((await app.inject({method: "POST", url: `${url}/evidence`, payload: bundle()})).statusCode).toBe(404);
+    } finally { await app.close(); }
+  });
+  it("serves .github evidence and exact revision routes with supported ID prefixes", async () => {
+    const current = {...analysis, id: `.github-${analysis.pr.number}-current`, createdAt: "2026-10-19T12:00:00Z", pr: {...analysis.pr, repo: ".github"}};
+    saveAnalysis(current);
+    const before = "b".repeat(40);
+    const previous = {...current, id: "_prior", createdAt: "2026-10-19T10:00:00Z", pr: {...current.pr, headSha: before}};
+    saveAnalysis(previous);
+    const review = draftReview(previous); review.course.goals = [{id: "reviewed", title: "Reviewed", src: "PR", quote: "Reviewed", stops: []}];
+    saveReview(review); saveState(previous.id, {...emptyState(), reviewed: {reviewed: "2026-10-19T11:00:00Z"}});
+    const run = bundle(); run.runId = "-run"; run.target.repo = ".github";
+    run.provenance.repository = {...run.target};
+    const path = current.files[0]!.path;
+    run.sourceRefs = [{owner: run.target.owner, repo: ".github", revision: current.pr.headSha, path, side: "RIGHT", startLine: 1, endLine: 1}];
+    importEvidence(current.id, run);
+    const app = await buildApp({github: {
+      readTree: async (_ref, sha) => ({truncated: false, tree: [{path, sha: sha === before ? "c".repeat(40) : "d".repeat(40), mode: "100644", type: "blob"}]}),
+      readFile: async (_ref, sha) => sha === before ? "old\n" : "new\n",
+    }});
+    try {
+      const url = `/api/reviews/${current.id}`;
+      const index = await app.inject(`${url}/evidence`);
+      expect(index.statusCode).toBe(200); expect(index.json()).toMatchObject({runs: [{runId: "-run", freshness: "current"}]});
+      const detail = await app.inject(`${url}/evidence/-run`);
+      expect(detail.statusCode).toBe(200); expect(detail.json()).toMatchObject({bundle: run});
+      const source = await app.inject(`${url}/evidence/-run/source?ref=0`);
+      expect(source.statusCode).toBe(200); expect(source.json()).toMatchObject({content: "new\n"});
+      const comparison = await app.inject(`${url}/evidence/compare?left=-run&right=-run`);
+      expect(comparison.statusCode).toBe(200); expect(comparison.json()).toMatchObject({leftRunId: "-run"});
+      const revisions = await app.inject(`${url}/revisions?baseline=_prior`);
+      expect(revisions.statusCode).toBe(200); expect(revisions.json()).toMatchObject({baseline: {reviewId: "_prior"}, comparison: {status: "available"}});
+      const file = await app.inject(`${url}/revisions/file?baseline=_prior&path=${encodeURIComponent(path)}`);
+      expect(file.statusCode).toBe(200); expect(file.json()).toMatchObject({baselineReviewId: "_prior", patch: expect.stringContaining("-old\n+new")});
+      expect((await app.inject(`${url}/deployment`)).statusCode).toBe(200);
     } finally { await app.close(); }
   });
 });
