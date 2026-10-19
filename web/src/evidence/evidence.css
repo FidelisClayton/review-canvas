@@ -15,7 +15,7 @@
 .evidence-body>*{min-inline-size:0}
 .evidence-panel p,.evidence-panel li,.evidence-panel dd,.evidence-panel h3,.evidence-panel h4{overflow-wrap:anywhere}
 .evidence-panel p{max-inline-size:75ch}
-.evidence-panel h3{font-size:18px;font-weight:600;line-height:1.3;margin-block:18px 8px;text-wrap:pretty}
+.evidence-panel h3{font-size:16px;font-weight:600;line-height:1.3;margin-block:18px 8px;text-wrap:pretty}
 .evidence-panel h4{font-size:14px;margin-block:14px 6px}
 .evidence-panel pre,.evidence-panel code{font-family:var(--mono);font-size:12px;tab-size:2}
 .evidence-panel pre{white-space:pre-wrap;overflow-wrap:anywhere;background:var(--paper);padding:12px;margin-block:8px;border:1px solid var(--rule);max-block-size:28rem;overflow:auto;overscroll-behavior:contain}
