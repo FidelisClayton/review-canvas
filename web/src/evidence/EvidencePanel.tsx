@@ -4,6 +4,9 @@ import { fetchEvidenceIndex, fetchEvidenceRun, fetchEvidenceSource } from "../ap
 import { DiffRow } from "../course/StopView";
 import { currentSourceStop, filterRuns, selectRun } from "./model";
 import { freshnessLabel, RunPlayback } from "./RunPlayback";
+import { BehaviorComparison } from "./BehaviorComparison";
+import { RevisionComparison } from "./RevisionComparison";
+import { DeploymentView } from "./DeploymentView";
 import "./evidence.css";
 
 export type EvidenceTab = "runs" | "compare" | "revisions" | "deployment";
@@ -142,7 +145,15 @@ export function EvidencePanel({ review, goalId, onClose, onSource, slots }: Evid
             </>}
           </div>
           {tabs.filter(([value]) => value !== "runs" && visited.includes(value)).map(([value, label]) => <div key={value} hidden={tab !== value || inspectingSource}>
-            {slots?.[value as Exclude<EvidenceTab, "runs">]?.({ review, index, active: tab === value && !inspectingSource, selectedRunId: runId, openRun, inspectSource, openSourceRef }) ?? <p>{label} view is not available in this build.</p>}
+            {(() => {
+              const context: EvidenceSlotContext = { review, index, active: tab === value && !inspectingSource, selectedRunId: runId, openRun, inspectSource, openSourceRef };
+              const slot = slots?.[value as Exclude<EvidenceTab, "runs">];
+              if (slot) return slot(context);
+              if (value === "compare") return <BehaviorComparison {...context} />;
+              if (value === "revisions") return <RevisionComparison {...context} />;
+              if (value === "deployment") return <DeploymentView {...context} />;
+              return <p>{label} view is not available in this build.</p>;
+            })()}
           </div>)}
         </>}
       </div>
