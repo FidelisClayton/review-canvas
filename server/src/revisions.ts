@@ -2,11 +2,52 @@ import { execFile } from "node:child_process";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { langOf, layerOf, noiseOf, parsePatch, repositoryPathSchema, revisionSchema, selectRevisionBaseline, type RevisionComparison, type RevisionFileChange, type RevisionFilePayload, type RevisionIndexPayload, type RevisionTreeEntry } from "@review-canvas/shared";
+import { z } from "zod";
+import { canonicalJson, jsonValueSchema, LAYERS, safeIdSchema, targetSchema, langOf, layerOf, noiseOf, parsePatch, repositoryPathSchema, revisionSchema, selectRevisionBaseline, type RevisionComparison, type RevisionFileChange, type RevisionFilePayload, type RevisionIndexPayload, type RevisionTreeEntry } from "@review-canvas/shared";
 import { atomicSidecar, EvidenceError, MAX_SOURCE_BYTES, pathDigest, readSidecar } from "./evidenceStore.js";
 import { relatedReviews, requireReview } from "./evidence.js";
 import { fetchExactTree, githubReadTransport, type GitHubReadTransport } from "./github.js";
 import { loadState, reviewPath } from "./store.js";
+
+const treeEntrySchema = z.object({
+  path: repositoryPathSchema, sha: revisionSchema,
+  mode: z.enum(["100644", "100755", "120000", "160000"]), type: z.enum(["blob", "commit"]),
+}).refine(entry => (entry.mode === "160000") === (entry.type === "commit"));
+const changeSchema = z.object({
+  path: repositoryPathSchema, status: z.enum(["added", "removed", "modified"]),
+  before: treeEntrySchema.nullable(), after: treeEntrySchema.nullable(), unavailableReason: z.string().optional(),
+}).refine(change => {
+  if ((change.before && change.before.path !== change.path) || (change.after && change.after.path !== change.path)) return false;
+  if (change.status === "added") return change.before === null && change.after !== null;
+  if (change.status === "removed") return change.before !== null && change.after === null;
+  return change.before !== null && change.after !== null && !sameEntry(change.before, change.after);
+});
+const inventoryCacheSchema = z.object({beforeSha: revisionSchema, afterSha: revisionSchema, files: z.array(changeSchema)})
+  .refine(cache => new Set(cache.files.map(file => file.path)).size === cache.files.length);
+const lineSchema = z.object({kind: z.enum(["add", "del", "ctx"]), text: z.string(), oldNo: z.number().int().nonnegative().nullable(), newNo: z.number().int().nonnegative().nullable()});
+const renderFileSchema = z.object({
+  id: safeIdSchema, path: repositoryPathSchema, previousPath: repositoryPathSchema.optional(), status: z.enum(["added", "removed", "modified"]),
+  additions: z.number().int().nonnegative(), deletions: z.number().int().nonnegative(), lang: z.string(), layer: z.enum(LAYERS),
+  noise: z.enum(["tests", "i18n", "api", "generated"]).nullable(), noiseReason: z.string().optional(), subjectOf: z.string().optional(), generatedFrom: z.string().optional(),
+  patchMissing: z.literal(false), hunks: z.array(z.object({id: safeIdSchema, range: z.string(), section: z.string(), lines: z.array(lineSchema)})),
+});
+const fileCacheSchema = z.object({
+  baselineReviewId: safeIdSchema, target: targetSchema, beforeSha: revisionSchema, afterSha: revisionSchema, change: changeSchema,
+  patch: z.string().nullable(), file: renderFileSchema.nullable(), unavailableReason: z.string().optional(),
+}).refine(cache => {
+  if (cache.patch === null || cache.file === null) return cache.patch === null && cache.file === null && !!cache.unavailableReason;
+  if (cache.file.path !== cache.change.path || cache.file.status !== cache.change.status) return false;
+  const hunks = parsePatch(cache.file.id, cache.patch);
+  if (canonicalJson(jsonValueSchema.parse(hunks)) !== canonicalJson(jsonValueSchema.parse(cache.file.hunks))) return false;
+  const lines = hunks.flatMap(hunk => hunk.lines);
+  return cache.file.additions === lines.filter(line => line.kind === "add").length && cache.file.deletions === lines.filter(line => line.kind === "del").length;
+});
+function sameEntry(left: RevisionTreeEntry | null, right: RevisionTreeEntry | null): boolean {
+  return left === null || right === null ? left === right : left.path === right.path && left.sha === right.sha && left.mode === right.mode && left.type === right.type;
+}
+function sameChange(left: RevisionFileChange, right: RevisionFileChange): boolean {
+  return left.path === right.path && left.status === right.status && sameEntry(left.before, right.before) && sameEntry(left.after, right.after);
+}
 
 function cachePath(id: string, before: string, after: string, file: string) {
   if (!revisionSchema.safeParse(before).success || !revisionSchema.safeParse(after).success) throw new EvidenceError("Exact full endpoint revisions are unavailable.");
@@ -32,9 +73,12 @@ export async function getRevisions(id: string, baselineId?: string, transport: G
   const comparison: RevisionComparison = {baselineReviewId: baseline.reviewId, owner: pr.owner, repo: pr.repo, number: pr.number, beforeSha: baseline.headSha, afterSha: pr.headSha, reviewedAt: baseline.reviewedAt!, status: "available", files: []};
   try {
     const path = cachePath(id, baseline.headSha, pr.headSha, "inventory.json");
-    const cached = readSidecar(path) as {beforeSha?: string; afterSha?: string; files?: RevisionFileChange[]} | null;
-    if (cached && cached.beforeSha === baseline.headSha && cached.afterSha === pr.headSha && Array.isArray(cached.files)) comparison.files = cached.files;
-    else {
+    const cached = readSidecar(path);
+    if (cached !== null) {
+      const parsed = inventoryCacheSchema.safeParse(cached);
+      if (!parsed.success || parsed.data.beforeSha !== baseline.headSha || parsed.data.afterSha !== pr.headSha) throw new EvidenceError("Invalid revision inventory cache.", 422);
+      comparison.files = parsed.data.files;
+    } else {
       const [left, right] = await Promise.all([fetchExactTree(pr, baseline.headSha, transport), fetchExactTree(pr, pr.headSha, transport)]);
       comparison.files = inventory(left, right);
       atomicSidecar(path, {beforeSha: baseline.headSha, afterSha: pr.headSha, files: comparison.files});
@@ -69,9 +113,14 @@ export async function getRevisionFile(id: string, baselineId: string | undefined
   if ([change.before, change.after].some(entry => entry && (entry.type === "commit" || entry.mode === "160000"))) return unavailable("Submodule contents are unavailable as a text diff.");
   if ([change.before, change.after].some(entry => entry?.mode === "120000")) return unavailable("Symbolic link contents are unavailable as a regular text diff.");
   if ([change.before, change.after].some(entry => entry && entry.type !== "blob")) return unavailable("This object type cannot be rendered as a text diff.");
-  const cached = readSidecar(cache) as RevisionFilePayload | null;
-  if (cached && cached.beforeSha === beforeSha && cached.afterSha === afterSha && cached.change.path === path) return {...cached, baselineReviewId};
   try {
+    const cached = readSidecar(cache);
+    if (cached !== null) {
+      const parsed = fileCacheSchema.safeParse(cached);
+      if (!parsed.success || parsed.data.beforeSha !== beforeSha || parsed.data.afterSha !== afterSha ||
+          parsed.data.target.owner !== owner || parsed.data.target.repo !== repo || parsed.data.target.number !== number || !sameChange(parsed.data.change, change)) return unavailable("Invalid revision file cache.");
+      return {...parsed.data, baselineReviewId};
+    }
     const text = async (entry: RevisionTreeEntry | null, sha: string) => {
       if (!entry) return "";
       const content = await transport.readFile(payload.target, sha, path);

@@ -1,10 +1,12 @@
-import { mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { createHash } from "node:crypto";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { buildAnalysis, draftReview, emptyState, type GhFile, type GhPull, type RevisionTreeEntry } from "@review-canvas/shared";
 import { getRevisionFile, getRevisions } from "./revisions.js";
-import { loadState, saveAnalysis, saveReview, saveState } from "./store.js";
+import { loadState, reviewPath, saveAnalysis, saveReview, saveState } from "./store.js";
+import { pathDigest } from "./evidenceStore.js";
 import { fetchExactTree, type GitHubReadTransport } from "./github.js";
 const fixture = JSON.parse(readFileSync(new URL("../../test/fixtures/sync-retries.json", import.meta.url), "utf8")) as {pull: GhPull; files: GhFile[]};
 const current = buildAnalysis(fixture.pull, fixture.files, {}, new Date("2026-10-19T12:00:00Z"));
@@ -16,7 +18,7 @@ function baseline(id = "prior", owner = current.pr.owner, at = "2026-10-19T10:00
   const analysis = {...current, id, createdAt: "2026-10-19T09:00:00Z", pr: {...current.pr, owner, headSha: before}}; saveAnalysis(analysis);
   const review = draftReview(analysis); review.course.goals = [{id: "reviewed", title: "Reviewed", src: "PR", quote: "Reviewed", stops: []}]; saveReview(review); saveState(id, {...emptyState(), reviewed: {reviewed: at}});
 }
-const entry = (path: string, sha: string, mode = "100644", type = "blob"): RevisionTreeEntry => ({path, sha, mode, type});
+const entry = (path: string, sha: string, mode = "100644", type = "blob"): RevisionTreeEntry => ({path, sha: /^[a-f0-9]{40}$/.test(sha) ? sha : createHash("sha1").update(sha).digest("hex"), mode, type});
 function transport(left: RevisionTreeEntry[], right: RevisionTreeEntry[], readFile: GitHubReadTransport["readFile"] = async (_ref, sha) => sha === before ? "old\n" : "new\n") {
   return {readTree: vi.fn(async (_ref: unknown, sha: string) => ({tree: sha === before ? left : right, truncated: false})), readFile: vi.fn(readFile)};
 }
@@ -38,7 +40,7 @@ describe("exact revision inventory", () => {
   it("falls back to nonrecursive subtree traversal when recursive response truncates", async () => {
     const readTree = vi.fn(async (_ref: unknown, sha: string, recursive: boolean) => recursive ? {truncated: true, tree: []} : sha === after ? {truncated: false, tree: [entry("dir", "d", "040000", "tree"), entry("root", "r")]} : {truncated: false, tree: [entry("nested", "n")]});
     expect(await fetchExactTree(current.pr, after, {readTree})).toEqual([entry("dir/nested", "n"), entry("root", "r")]);
-    expect(readTree.mock.calls.map(c => [c[1], c[2]])).toEqual([[after, true], [after, false], ["d", false]]);
+    expect(readTree.mock.calls.map(c => [c[1], c[2]])).toEqual([[after, true], [after, false], [entry("dir", "d").sha, false]]);
   });
   it("reports failed trees unavailable with endpoints intact, never as empty changes", async () => {
     baseline(); const result = await getRevisions(current.id, undefined, {readTree: async () => {throw new Error("missing object");}, readFile: async () => ""});
@@ -76,5 +78,47 @@ describe("lazy exact endpoint patches", () => {
   it("handles removed files using only the existing side", async () => {
     baseline(); const io = transport([entry("removed", "1")], []); const result = await getRevisionFile(current.id, "prior", "removed", io);
     expect(result.change.status).toBe("removed"); expect(result.file?.hunks[0]?.lines[0]?.kind).toBe("del"); expect(io.readFile).toHaveBeenCalledTimes(1);
+  });
+});
+
+
+describe("revision cache integrity", () => {
+  const offline: GitHubReadTransport = {readTree: vi.fn(async () => {throw new Error("Unexpected network tree read");}), readFile: vi.fn(async () => {throw new Error("Unexpected network file read");})};
+  const cachedPath = (file: string) => reviewPath(current.id, `revisions/${before}-${after}/${file}`);
+  it("reports malformed inventory entries unavailable instead of publishing a false exact inventory", async () => {
+    baseline(); const io = transport([entry("code.ts", "1")], [entry("code.ts", "2")]);
+    await getRevisions(current.id, "prior", io);
+    const valid = JSON.parse(readFileSync(cachedPath("inventory.json"), "utf8")) as {beforeSha: string; afterSha: string; files: unknown[]};
+    expect((await getRevisions(current.id, "prior", offline)).comparison?.status).toBe("available");
+    const beforeEntry = entry("code.ts", "1"); const afterEntry = entry("code.ts", "2");
+    const change = {path: "code.ts", status: "modified", before: beforeEntry, after: afterEntry};
+    for (const files of [
+      [null], [{...change, path: "../private"}], [{...change, before: {...beforeEntry, sha: "short"}}],
+      [{...change, before: {...beforeEntry, mode: "bad"}}], [{...change, after: {...afterEntry, type: "tree"}}],
+      [{...change, after: {...afterEntry, path: "other.ts"}}], [{...change, status: "added"}], [change, change],
+    ]) {
+      writeFileSync(cachedPath("inventory.json"), JSON.stringify({...valid, files}));
+      const result = await getRevisions(current.id, "prior", offline);
+      expect(result.comparison).toMatchObject({status: "unavailable", beforeSha: before, afterSha: after, unavailableReason: expect.stringMatching(/cache/i)});
+    }
+  });
+  it("rejects a cached file with mismatched identity or malformed render rows before reuse", async () => {
+    baseline(); const io = transport([entry("code.ts", "1")], [entry("code.ts", "2")]);
+    const valid = await getRevisionFile(current.id, "prior", "code.ts", io);
+    expect((await getRevisionFile(current.id, "prior", "code.ts", offline)).file?.hunks).toEqual(valid.file?.hunks);
+    const mutations = [
+      {...valid, target: {...valid.target, owner: "foreign"}}, {...valid, beforeSha: "c".repeat(40)},
+      {...valid, change: {...valid.change, path: "other.ts"}},
+      {...valid, change: {...valid.change, before: entry("code.ts", "wrong")}},
+      {...valid, file: {...valid.file, path: "other.ts"}}, {...valid, file: {...valid.file, hunks: [null]}},
+      {...valid, file: {...valid.file, hunks: [{id: "bad", range: "bad", section: "", lines: [null]}]}},
+      {...valid, file: {...valid.file, hunks: []}}, {...valid, patch: {html: "not a patch"}},
+    ];
+    for (const mutation of mutations) {
+      writeFileSync(cachedPath(`files/${pathDigest("code.ts")}.json`), JSON.stringify(mutation));
+      expect(await getRevisionFile(current.id, "prior", "code.ts", offline)).toMatchObject({patch: null, file: null, unavailableReason: expect.stringMatching(/cache/i)});
+    }
+    writeFileSync(cachedPath(`files/${pathDigest("code.ts")}.json`), "{");
+    expect(await getRevisionFile(current.id, "prior", "code.ts", offline)).toMatchObject({patch: null, file: null, unavailableReason: expect.stringMatching(/cache|sidecar/i)});
   });
 });
