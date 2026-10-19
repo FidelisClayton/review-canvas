@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { buildAnalysis } from "./analysis.js";
 import { fileByPath, fixture } from "./fixture.test-helper.js";
 
 describe("buildAnalysis on the synthetic PR", () => {
@@ -48,5 +49,19 @@ describe("static links", () => {
     const filePairs = analysis.links.map((l) => `${hunkFile.get(l.from)}>${hunkFile.get(l.to)}`);
     expect(new Set(filePairs).size).toBe(filePairs.length);
     for (const l of analysis.links) expect(hunkFile.get(l.from)).not.toBe(hunkFile.get(l.to));
+  });
+});
+
+
+describe("exact base metadata", () => {
+  it("keeps legacy metadata valid without inventing a base SHA", () => {
+    const { pull, files } = fixture();
+    expect(buildAnalysis(pull, files, {}).pr.baseSha).toBeUndefined();
+  });
+  it("preserves the exact base SHA when supplied by GitHub", () => {
+    const { pull, files } = fixture(); const baseSha = "b".repeat(40);
+    const analysis = buildAnalysis({ ...pull, base: { ...pull.base, sha: baseSha } }, files, {});
+    expect(analysis.pr.baseSha).toBe(baseSha);
+    expect(analysis.version).toBe(1);
   });
 });

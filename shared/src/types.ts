@@ -85,6 +85,8 @@ export interface PrMeta {
   baseRef: string;
   headRef: string;
   headSha: string;
+  /** Absent on legacy reviews; never inferred from the current base branch. */
+  baseSha?: string;
   additions: number;
   deletions: number;
   changedFiles: number;

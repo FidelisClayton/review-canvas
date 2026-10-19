@@ -72,3 +72,6 @@ export const submitInputSchema = z.object({
   event: z.enum(["COMMENT", "APPROVE", "REQUEST_CHANGES"]),
   body: z.string().max(20000).default(""),
 });
+
+export { scenarioManifestSchema, executionBundleSchema, observationSchema, observationInputSchema, sourceRefSchema, importReceiptSchema, storedExecutionSchema } from "./evidence.js";
+export { deploymentAnalysisSchema } from "./deployment.js";

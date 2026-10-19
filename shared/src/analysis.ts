@@ -10,7 +10,7 @@ export interface GhPull {
   title: string;
   body: string | null;
   user: { login: string } | null;
-  base: { ref: string; repo: { name: string; owner: { login: string } } };
+  base: { ref: string; sha?: string; repo: { name: string; owner: { login: string } } };
   head: { ref: string; sha: string };
   additions: number;
   deletions: number;
@@ -47,6 +47,7 @@ export function buildAnalysis(pull: GhPull, ghFiles: GhFile[], heads: Record<str
     baseRef: pull.base.ref,
     headRef: pull.head.ref,
     headSha: pull.head.sha,
+    ...(pull.base.sha ? { baseSha: pull.base.sha } : {}),
     additions: pull.additions,
     deletions: pull.deletions,
     changedFiles: pull.changed_files,

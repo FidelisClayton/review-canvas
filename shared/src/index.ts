@@ -7,3 +7,6 @@ export * from "./analysis.js";
 export * from "./course.js";
 export * from "./crop.js";
 export * from "./view.js";
+export * from "./evidence.js";
+export * from "./comparison.js";
+export * from "./deployment.js";
