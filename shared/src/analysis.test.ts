@@ -8,7 +8,7 @@ describe("buildAnalysis on the synthetic PR", () => {
   const pathOf = (id: string | undefined) => (id ? byId.get(id)?.path : undefined);
 
   it("names the review after the repo, number and head commit", () => {
-    expect(analysis.id).toBe("storefront-4182-4182abc");
+    expect(analysis.id).toBe("storefront-4182-4182def");
     expect(analysis.pr.owner).toBe("acme");
   });
 
@@ -56,7 +56,8 @@ describe("static links", () => {
 describe("exact base metadata", () => {
   it("keeps legacy metadata valid without inventing a base SHA", () => {
     const { pull, files } = fixture();
-    expect(buildAnalysis(pull, files, {}).pr.baseSha).toBeUndefined();
+    const {sha: _sha, ...base} = pull.base;
+    expect(buildAnalysis({...pull, base}, files, {}).pr.baseSha).toBeUndefined();
   });
   it("preserves the exact base SHA when supplied by GitHub", () => {
     const { pull, files } = fixture(); const baseSha = "b".repeat(40);

@@ -4,6 +4,31 @@ A test stop shows source. It does not say a test ran or passed. An execution bun
 real command's process result and the observations its instrumentation emitted. Playback reads
 that bundle without rerunning application code.
 
+## Synthetic demo
+
+`review-canvas demo` loads the existing source course at `storefront-4182-4182def`, three
+explicitly synthetic viewer runs, deployment analysis and a marked earlier review. It seeds
+the existing exact-comparison cache, so Since reviewed and its selected file work offline.
+It does not execute the scenario or contact the synthetic `acme/storefront` repository.
+Existing legacy demos at `storefront-4182-4182abc` retain their original data and local state;
+the new full-SHA fixture uses a separate review identity.
+
+`synthetic-base` and `synthetic-head` have matching declarations and different response/job
+values. `synthetic-partial` retains two observations, exits 1, reports partial capture and
+unknown worktree provenance. Every fixture import receives `synthetic-fixture`; the supplied
+JSON cannot choose its own receipt. These examples are viewer data, not recording proof.
+
+Deployment includes declared additive fields, an observed old-app/new-schema compatibility
+assertion, observed backfill counts, an inferred rollback constraint, and a declared not-run
+check. A separate negative check captures `actual: "incompatible"` while its assertion passes:
+passing that assertion does not make the combination compatible. Old-revision, partial and
+unknown qualifications remain visible beside their linked observations.
+
+Current source-stop jumps and cached head-file drawers work offline. Exact evidence-file
+fetching still uses GitHub and may be unavailable for this nonexistent repository. The source
+comparison cache contains only the demo's selected endpoint file, not a general source cache.
+Reloading the demo preserves the current review's read, reviewed and draft state.
+
 ## Record and inspect
 
 Prepare and publish a review first. Copy exact published goal IDs and RIGHT/head source anchors
@@ -89,6 +114,49 @@ synthetic `acme/storefront` repository. To record that fixture with known proven
 isolated synthetic Git checkout with that origin and a committed copy of the scenario; use
 absolute manifest/output paths outside it. Do not run it from this repository's checkout and
 claim its revision belongs to the demo target.
+
+For a real recording smoke test, run these commands from this repository after building and
+loading the demo. They create a separate synthetic Git repository and write artifacts outside
+its tree. Both commits use the same committed manifest; only `RETRY_POLICY` changes.
+
+```bash
+evidence_tmp=$(mktemp -d)
+mkdir "$evidence_tmp/repo"
+cp test/scenarios/sync-retries.manifest.json "$evidence_tmp/repo/scenario.json"
+sed 's/const RETRY_POLICY = "deduplicate"/const RETRY_POLICY = "duplicate"/' test/scenarios/sync-retries.mjs > "$evidence_tmp/repo/scenario.mjs"
+git -C "$evidence_tmp/repo" init -q
+git -C "$evidence_tmp/repo" config user.name Synthetic
+git -C "$evidence_tmp/repo" config user.email synthetic@example.test
+git -C "$evidence_tmp/repo" remote add origin https://github.com/acme/storefront.git
+git -C "$evidence_tmp/repo" add .
+git -C "$evidence_tmp/repo" commit -qm 'Synthetic duplicate implementation'
+review-canvas evidence record storefront-4182-4182def --scenario "$evidence_tmp/repo/scenario.json" --out "$evidence_tmp/base.json" --cwd "$evidence_tmp/repo" -- node scenario.mjs
+# The duplicate implementation exits 1; its complete artifact remains at base.json.
+cp test/scenarios/sync-retries.mjs "$evidence_tmp/repo/scenario.mjs"
+git -C "$evidence_tmp/repo" add scenario.mjs
+git -C "$evidence_tmp/repo" commit -qm 'Synthetic deduplicated implementation'
+review-canvas evidence record storefront-4182-4182def --scenario "$evidence_tmp/repo/scenario.json" --out "$evidence_tmp/head.json" --cwd "$evidence_tmp/repo" -- node scenario.mjs
+review-canvas evidence import storefront-4182-4182def "$evidence_tmp/base.json"
+review-canvas evidence import storefront-4182-4182def "$evidence_tmp/head.json"
+review-canvas evidence list storefront-4182-4182def --json
+base_run=$(node -p 'JSON.parse(require("node:fs").readFileSync(process.argv[1], "utf8")).runId' "$evidence_tmp/base.json")
+head_run=$(node -p 'JSON.parse(require("node:fs").readFileSync(process.argv[1], "utf8")).runId' "$evidence_tmp/head.json")
+review-canvas evidence show storefront-4182-4182def "$head_run" --json
+review-canvas evidence compare storefront-4182-4182def --left "$base_run" --right "$head_run" --json
+```
+
+These real commit SHAs differ from the viewer fixture SHAs, so the imported recordings
+are historical and `--mode base-head` correctly rejects that pair. The scenario manifest's
+`retry` goal is explicitly unbound in the demo course; replace it with a published goal ID
+before the first commit if goal binding is needed. Normal imports receive `imported-file`.
+The automated integration test creates its own matching review at the actual base/head commits
+and proves exact base/head behavior comparison through the API. Its source transport reads
+`git ls-tree` and `git show` from that same temporary repository, so source inventory and selected
+patch are also checked at the actual endpoint SHAs. Reload uses the resulting cache:
+
+```bash
+npx vitest run server/src/evidence.integration.test.ts server/src/app.test.ts
+```
 
 A source reference has `{owner, repo, revision, path, side, startLine, endLine}`. Use the full
 commit SHA, repository-relative path, `LEFT` or `RIGHT`, and inclusive positive line numbers.

@@ -1,0 +1,274 @@
+{
+  "note": "Synthetic endpoint comparison; these hashes and source contents describe viewer fixtures, not GitHub objects.",
+  "currentCreatedAt": "2026-10-19T12:00:00.000Z",
+  "baseline": {
+    "reviewId": "storefront-4182-aaaaaaa",
+    "headSha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "createdAt": "2026-10-18T09:00:00.000Z",
+    "reviewedAt": "2026-10-18T10:00:00.000Z"
+  },
+  "inventory": {
+    "beforeSha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "afterSha": "4182def000000000000000000000000000000000",
+    "files": [
+      {
+        "path": "app/models/order_sync.rb",
+        "status": "modified",
+        "before": {
+          "path": "app/models/order_sync.rb",
+          "sha": "052e7bc1403bf1c69a707d3aa40b9b86cbcee1dc",
+          "mode": "100644",
+          "type": "blob"
+        },
+        "after": {
+          "path": "app/models/order_sync.rb",
+          "sha": "5e64ddcaf9c5c581d16f10609b543da7a2560e6b",
+          "mode": "100644",
+          "type": "blob"
+        }
+      }
+    ]
+  },
+  "files": [
+    {
+      "baselineReviewId": "storefront-4182-aaaaaaa",
+      "target": {
+        "owner": "acme",
+        "repo": "storefront",
+        "number": 4182
+      },
+      "beforeSha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "afterSha": "4182def000000000000000000000000000000000",
+      "change": {
+        "path": "app/models/order_sync.rb",
+        "status": "modified",
+        "before": {
+          "path": "app/models/order_sync.rb",
+          "sha": "052e7bc1403bf1c69a707d3aa40b9b86cbcee1dc",
+          "mode": "100644",
+          "type": "blob"
+        },
+        "after": {
+          "path": "app/models/order_sync.rb",
+          "sha": "5e64ddcaf9c5c581d16f10609b543da7a2560e6b",
+          "mode": "100644",
+          "type": "blob"
+        }
+      },
+      "patch": "diff --git a/app/models/order_sync.rb b/app/models/order_sync.rb\n--- a/app/models/order_sync.rb\n+++ b/app/models/order_sync.rb\n@@ -3,9 +3,14 @@ class OrderSync < ApplicationRecord\n   belongs_to :shop\n   belongs_to :order\n \n-  enum :status, { pending: 0, synced: 1, errored: 2 }\n+  enum :status, { pending: 0, synced: 1, retrying: 2, failed: 3 }\n+\n+  MAX_ATTEMPTS = 5\n+\n+  scope :failed_since, ->(time) { failed.where(failed_at: time..) }\n \n   validates :order_id, uniqueness: { scope: :shop_id }\n@@ -24,8 +29,25 @@ class OrderSync < ApplicationRecord\n   def sync!\n     ShopifyClient.new(shop).push_order(order)\n-    update!(status: :synced)\n-  end\n+    update!(status: :synced, last_error: nil)\n+  end\n+\n+  def record_failure!(error)\n+    increment(:attempts)\n+    if attempts >= MAX_ATTEMPTS\n+      update!(status: :failed, failed_at: Time.current, last_error: error.message)\n+    else\n+      update!(status: :retrying, last_error: error.message)\n+    end\n+  end\n+\n+  def retry!\n+    update!(status: :pending, attempts: 0, failed_at: nil)\n+    OrderSyncJob.perform_later(id)\n+  end\n",
+      "file": {
+        "id": "revision-340cde3bac559abc",
+        "path": "app/models/order_sync.rb",
+        "status": "modified",
+        "additions": 21,
+        "deletions": 3,
+        "lang": "rb",
+        "layer": "data",
+        "noise": null,
+        "patchMissing": false,
+        "hunks": [
+          {
+            "id": "revision-340cde3bac559abc.h1",
+            "range": "@@ -3,9 +3,14 @@",
+            "section": "class OrderSync < ApplicationRecord",
+            "lines": [
+              {
+                "kind": "ctx",
+                "text": "  belongs_to :shop",
+                "oldNo": 3,
+                "newNo": 3
+              },
+              {
+                "kind": "ctx",
+                "text": "  belongs_to :order",
+                "oldNo": 4,
+                "newNo": 4
+              },
+              {
+                "kind": "ctx",
+                "text": "",
+                "oldNo": 5,
+                "newNo": 5
+              },
+              {
+                "kind": "del",
+                "text": "  enum :status, { pending: 0, synced: 1, errored: 2 }",
+                "oldNo": 6,
+                "newNo": null
+              },
+              {
+                "kind": "add",
+                "text": "  enum :status, { pending: 0, synced: 1, retrying: 2, failed: 3 }",
+                "oldNo": null,
+                "newNo": 6
+              },
+              {
+                "kind": "add",
+                "text": "",
+                "oldNo": null,
+                "newNo": 7
+              },
+              {
+                "kind": "add",
+                "text": "  MAX_ATTEMPTS = 5",
+                "oldNo": null,
+                "newNo": 8
+              },
+              {
+                "kind": "add",
+                "text": "",
+                "oldNo": null,
+                "newNo": 9
+              },
+              {
+                "kind": "add",
+                "text": "  scope :failed_since, ->(time) { failed.where(failed_at: time..) }",
+                "oldNo": null,
+                "newNo": 10
+              },
+              {
+                "kind": "ctx",
+                "text": "",
+                "oldNo": 7,
+                "newNo": 11
+              },
+              {
+                "kind": "ctx",
+                "text": "  validates :order_id, uniqueness: { scope: :shop_id }",
+                "oldNo": 8,
+                "newNo": 12
+              }
+            ]
+          },
+          {
+            "id": "revision-340cde3bac559abc.h2",
+            "range": "@@ -24,8 +29,25 @@",
+            "section": "class OrderSync < ApplicationRecord",
+            "lines": [
+              {
+                "kind": "ctx",
+                "text": "  def sync!",
+                "oldNo": 24,
+                "newNo": 29
+              },
+              {
+                "kind": "ctx",
+                "text": "    ShopifyClient.new(shop).push_order(order)",
+                "oldNo": 25,
+                "newNo": 30
+              },
+              {
+                "kind": "del",
+                "text": "    update!(status: :synced)",
+                "oldNo": 26,
+                "newNo": null
+              },
+              {
+                "kind": "del",
+                "text": "  end",
+                "oldNo": 27,
+                "newNo": null
+              },
+              {
+                "kind": "add",
+                "text": "    update!(status: :synced, last_error: nil)",
+                "oldNo": null,
+                "newNo": 31
+              },
+              {
+                "kind": "add",
+                "text": "  end",
+                "oldNo": null,
+                "newNo": 32
+              },
+              {
+                "kind": "add",
+                "text": "",
+                "oldNo": null,
+                "newNo": 33
+              },
+              {
+                "kind": "add",
+                "text": "  def record_failure!(error)",
+                "oldNo": null,
+                "newNo": 34
+              },
+              {
+                "kind": "add",
+                "text": "    increment(:attempts)",
+                "oldNo": null,
+                "newNo": 35
+              },
+              {
+                "kind": "add",
+                "text": "    if attempts >= MAX_ATTEMPTS",
+                "oldNo": null,
+                "newNo": 36
+              },
+              {
+                "kind": "add",
+                "text": "      update!(status: :failed, failed_at: Time.current, last_error: error.message)",
+                "oldNo": null,
+                "newNo": 37
+              },
+              {
+                "kind": "add",
+                "text": "    else",
+                "oldNo": null,
+                "newNo": 38
+              },
+              {
+                "kind": "add",
+                "text": "      update!(status: :retrying, last_error: error.message)",
+                "oldNo": null,
+                "newNo": 39
+              },
+              {
+                "kind": "add",
+                "text": "    end",
+                "oldNo": null,
+                "newNo": 40
+              },
+              {
+                "kind": "add",
+                "text": "  end",
+                "oldNo": null,
+                "newNo": 41
+              },
+              {
+                "kind": "add",
+                "text": "",
+                "oldNo": null,
+                "newNo": 42
+              },
+              {
+                "kind": "add",
+                "text": "  def retry!",
+                "oldNo": null,
+                "newNo": 43
+              },
+              {
+                "kind": "add",
+                "text": "    update!(status: :pending, attempts: 0, failed_at: nil)",
+                "oldNo": null,
+                "newNo": 44
+              },
+              {
+                "kind": "add",
+                "text": "    OrderSyncJob.perform_later(id)",
+                "oldNo": null,
+                "newNo": 45
+              },
+              {
+                "kind": "add",
+                "text": "  end",
+                "oldNo": null,
+                "newNo": 46
+              }
+            ]
+          }
+        ]
+      }
+    }
+  ]
+}

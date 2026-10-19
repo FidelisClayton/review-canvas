@@ -1,0 +1,106 @@
+{
+  "version": 1,
+  "target": {
+    "owner": "acme",
+    "repo": "storefront",
+    "number": 4182,
+    "headSha": "4182def000000000000000000000000000000000"
+  },
+  "schemaChanges": [
+    {
+      "id": "retry-columns",
+      "title": "Synthetic additive retry fields",
+      "operation": "expand",
+      "description": "Declared addition of attempts, last_error and failed_at.",
+      "basis": "declared",
+      "evidenceRefs": [],
+      "sourceRefs": [
+        {
+          "owner": "acme",
+          "repo": "storefront",
+          "revision": "4182def000000000000000000000000000000000",
+          "path": "db/migrate/20261006141200_add_retry_fields_to_order_syncs.rb",
+          "side": "RIGHT",
+          "startLine": 1,
+          "endLine": 9
+        }
+      ]
+    }
+  ],
+  "compatibility": [
+    {
+      "id": "old-app-new-schema",
+      "appRevision": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "schemaVersion": "2",
+      "label": "Synthetic old app / expanded schema",
+      "claim": "compatible",
+      "basis": "observed",
+      "evidenceRefs": [
+        {
+          "runId": "synthetic-base",
+          "observationId": "old-app-new-schema"
+        }
+      ]
+    },
+    {
+      "id": "negative-partial-check",
+      "appRevision": "4182def000000000000000000000000000000000",
+      "schemaVersion": "1",
+      "label": "Synthetic negative check, partial capture and unknown worktree",
+      "claim": "incompatible",
+      "basis": "observed",
+      "evidenceRefs": [
+        {
+          "runId": "synthetic-partial",
+          "observationId": "new-app-old-schema"
+        }
+      ]
+    },
+    {
+      "id": "new-app-old-schema-unrun",
+      "appRevision": "4182def000000000000000000000000000000000",
+      "schemaVersion": "1-unchecked",
+      "label": "Synthetic new app / unchecked old schema variant",
+      "claim": "not_run",
+      "basis": "declared",
+      "evidenceRefs": []
+    }
+  ],
+  "backfills": [
+    {
+      "id": "retry-backfill",
+      "title": "Synthetic retry-field backfill",
+      "state": "completed",
+      "processed": 12,
+      "remaining": 0,
+      "basis": "observed",
+      "sourceRefs": [],
+      "evidenceRefs": [
+        {
+          "runId": "synthetic-head",
+          "observationId": "backfill-output"
+        }
+      ]
+    }
+  ],
+  "rollback": [
+    {
+      "id": "enum-rollback",
+      "description": "Synthetic inference: retrying rows must be translated before restoring the old status mapping.",
+      "state": "constrained",
+      "basis": "inferred",
+      "sourceRefs": [
+        {
+          "owner": "acme",
+          "repo": "storefront",
+          "revision": "4182def000000000000000000000000000000000",
+          "path": "app/models/order_sync.rb",
+          "side": "RIGHT",
+          "startLine": 6,
+          "endLine": 6
+        }
+      ],
+      "evidenceRefs": []
+    }
+  ]
+}

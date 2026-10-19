@@ -105,6 +105,10 @@ describe("CLI evidence", () => {
     }
   });
   it("compares selected runs with explicit mismatch reasons in one JSON value", async () => {
+    const legacyAnalysis = structuredClone(analysis);
+    delete legacyAnalysis.pr.baseSha;
+    saveAnalysis(legacyAnalysis);
+    saveReview(draftReview(legacyAnalysis));
     const {out, bundle} = await record();
     await main(["evidence", "import", analysis.id, out]);
     const other = {...bundle, runId: "other", capture: {...bundle.capture, status: "partial", issues: ["Missing trace"]}};
@@ -180,6 +184,10 @@ describe("CLI deployment and revisions", () => {
 
 describe("prepare revision identity", () => {
   it("records the exact base and checks metadata after fetching files and heads", async () => {
+    const legacyAnalysis = structuredClone(analysis);
+    delete legacyAnalysis.pr.baseSha;
+    saveAnalysis(legacyAnalysis);
+    saveReview(draftReview(legacyAnalysis));
     const pull = structuredClone(fixture.pull); pull.base.sha = "b".repeat(40);
     vi.mocked(github.fetchPull).mockResolvedValue(pull);
     const {analysis: prepared} = await prepare("example/sync-service#42");

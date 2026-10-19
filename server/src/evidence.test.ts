@@ -54,6 +54,9 @@ describe("immutable evidence", () => {
     expect(loadReview(analysis.id)?.analysis.pr).toEqual(analysis.pr);
   });
   it("compares only selected stored runs without touching review progress", () => {
+    const legacyAnalysis = structuredClone(analysis);
+    delete legacyAnalysis.pr.baseSha;
+    saveAnalysis(legacyAnalysis);
     const left = bundle(); left.provenance.revision = "b".repeat(40); importEvidence(analysis.id, left);
     const right = bundle(); right.runId = "right"; right.inputs = {other: true}; right.inputDigest = digest(right.inputs); importEvidence(analysis.id, right);
     const state = loadState(analysis.id);

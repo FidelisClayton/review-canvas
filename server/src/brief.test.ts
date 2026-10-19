@@ -88,9 +88,11 @@ describe("courseTemplate", () => {
 
 describe("evidence author context", () => {
   it("exposes exact head source anchors and published goal IDs without inventing a legacy base", () => {
-    const review = draftReview(analysis);
+    const legacyAnalysis = structuredClone(analysis);
+    delete legacyAnalysis.pr.baseSha;
+    const review = draftReview(legacyAnalysis);
     review.course.goals = [{id: "retry", title: "Retry", quote: "Retry", src: "PR", stops: []}];
-    const brief = renderBrief(analysis, "/tmp/course.json", {review});
+    const brief = renderBrief(legacyAnalysis, "/tmp/course.json", {review});
     expect(brief).toContain('"goalId": "retry"');
     expect(brief).toContain('"revision": "' + analysis.pr.headSha + '"');
     expect(brief).toContain('"side": "RIGHT"');

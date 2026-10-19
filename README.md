@@ -88,7 +88,7 @@ Then, in Claude Code or Codex:
 | `review-canvas prepare <pr>` | Fetch and analyze a PR; write the brief and a course JSON template. |
 | `review-canvas publish <id> [course.json]` | Check the course, save it, start the server, print the URL and any warnings. |
 | `review-canvas open <pr>` | Prepare and open in the Map view without goals, without an agent. |
-| `review-canvas demo` | Load the synthetic demo PR. |
+| `review-canvas demo` | Load the synthetic course, evidence, deployment and earlier reviewed snapshot with an offline source comparison. |
 | `review-canvas up` · `stop` · `restart` · `serve` | Manage the server (port 4790, bound to 127.0.0.1). |
 | `review-canvas setup [--public-url URL]` | Choose the URL reviews open at. With no URL, uses `tailscale serve`. |
 | `review-canvas evidence record <id> --scenario <manifest.json> --out <bundle.json> [--cwd <path>] [--timeout-ms <ms>] -- <command> [args...]` | Run explicit argv locally and write an artifact; does not import it. |
@@ -103,6 +103,13 @@ The inspection commands also work without `--json`. See [docs/EVIDENCE.md](docs/
 for the manifest, line protocol, executable Node example and deployment fields. New preparation
 rechecks the repository, PR and endpoint SHAs after fetching files, and refuses a mixed snapshot.
 
+The evidence demo uses review ID `storefront-4182-4182def`; existing legacy demos at
+`storefront-4182-4182abc` keep their original data and state. Its evidence is labeled `synthetic-fixture`;
+it illustrates the viewer and does not prove that those commands ran. Runs include matching
+base/head declarations, a failed process, and a partial capture with unknown worktree provenance.
+Since reviewed uses a cached synthetic endpoint diff without GitHub. Exact source-file fetching
+still needs GitHub; current source-stop navigation and cached head files work offline.
+
 ## Keyboard
 
 `J`/`K` next or previous stop · `]`/`[` next or previous goal · `X` mark the goal reviewed ·
@@ -115,7 +122,13 @@ zoom · `Esc` close the drawer, then the composer.
 npm run dev        # shared watch + server (tsx) + web (vite, proxies /api to :4790)
 npm test           # vitest: parser, layers, noise, links, crops, course merge, API
 npm run typecheck
+npm run build
 ```
+
+GitHub Actions runs these three checks on Node 22 for pushes and pull requests. The integration
+test executes the Node HTTP scenario at two real temporary Git commits, imports both artifacts,
+and reads their observations and comparison through Fastify. It also compares source trees and
+file contents from those commits. It uses an isolated store and no GitHub requests.
 
 - [`docs/PRODUCT.md`](docs/PRODUCT.md): who it is for and its principles.
 - [`docs/DESIGN.md`](docs/DESIGN.md): the orienteering-map visual system, including the agent-note style.

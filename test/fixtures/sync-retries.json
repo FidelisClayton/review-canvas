@@ -15,11 +15,12 @@
         "owner": {
           "login": "acme"
         }
-      }
+      },
+      "sha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
     },
     "head": {
       "ref": "mara/order-sync-retries",
-      "sha": "4182abcdef0123456789abcdef0123456789abcd"
+      "sha": "4182def000000000000000000000000000000000"
     },
     "additions": 236,
     "deletions": 18,

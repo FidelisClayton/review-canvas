@@ -80,6 +80,20 @@ describe("review API", () => {
     const { state } = (await app.inject({ method: "GET", url: `/api/reviews/${legacy.id}` })).json<ReviewPayload>();
     expect(state).toEqual({ read: {}, reviewed: {}, drafts: [], verdict: "COMMENT", summary: "", submitted: null });
   });
+
+  it("loads a v2 review without base metadata or evidence and leaves comparison unavailable", async () => {
+    const {baseSha: _baseSha, ...pr} = analysis.pr;
+    const legacy = {...analysis, id: "legacy-no-evidence", pr: {...pr, number: 4183}};
+    store.saveAnalysis(legacy);
+    store.saveReview(mergeCourse(legacy, courseInputSchema.parse(courseTemplate(legacy))));
+    const url = `/api/reviews/${legacy.id}`;
+    const body = (await app.inject(url)).json<ReviewPayload>();
+    expect(body.review.version).toBe(2); expect(body.review.analysis.pr.baseSha).toBeUndefined();
+    expect(body.review.outdated).not.toBe(true);
+    expect((await app.inject(`${url}/evidence`)).json()).toMatchObject({runs: [], errors: []});
+    expect((await app.inject(`${url}/deployment`)).json()).toEqual({status: "absent"});
+    expect((await app.inject(`${url}/revisions`)).json()).toMatchObject({baseline: null, comparison: null, unavailableReason: "No earlier reviewed revision is available"});
+  });
 });
 
 describe("head files", () => {

@@ -1,0 +1,584 @@
+[
+  {
+    "version": 1,
+    "runId": "synthetic-base",
+    "target": {
+      "owner": "acme",
+      "repo": "storefront",
+      "number": 4182
+    },
+    "scenario": {
+      "id": "sync-retries",
+      "version": "1",
+      "title": "Synthetic retry viewer fixture"
+    },
+    "inputs": {
+      "recordId": "synthetic-record-1",
+      "attempts": 1
+    },
+    "environment": {
+      "fixture": "synthetic-viewer-data",
+      "schemaVersion": "2"
+    },
+    "inputDigest": "03a7c56527b42b00816fa1127f4ad974d8b1536b7166c13affe4cb6e4a757e4e",
+    "environmentDigest": "98c32ff0c8b4d58abe4086f6e41b7d0e588cdcde040f7c813c2f6904a1334331",
+    "goalIds": [
+      "failed-syncs-retry-automatically-with-backoff"
+    ],
+    "sourceRefs": [],
+    "provenance": {
+      "producer": {
+        "name": "synthetic-viewer-fixture",
+        "version": "1"
+      },
+      "origin": "imported",
+      "revision": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "repository": {
+        "owner": "acme",
+        "repo": "storefront"
+      },
+      "worktree": {
+        "before": {
+          "dirty": false,
+          "fingerprint": "synthetic-clean-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        },
+        "after": {
+          "dirty": false,
+          "fingerprint": "synthetic-clean-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        }
+      }
+    },
+    "process": {
+      "argv": [
+        "synthetic-viewer-fixture",
+        "retry"
+      ],
+      "cwd": ".",
+      "startedAt": "2026-10-19T10:00:00.000Z",
+      "finishedAt": "2026-10-19T10:00:10.000Z",
+      "exitCode": 1,
+      "signal": null,
+      "termination": "exited",
+      "stdout": "Synthetic viewer data; this fixture is not a recorder artifact.",
+      "stderr": "",
+      "stdoutTruncated": false,
+      "stderrTruncated": false
+    },
+    "observations": [
+      {
+        "id": "request-input",
+        "kind": "input",
+        "title": "Synthetic fixture: Declared request",
+        "value": {
+          "recordId": "synthetic-record-1",
+          "attempts": 1
+        },
+        "sourceRefs": [],
+        "sequence": 0,
+        "at": "2026-10-19T10:00:01.000Z"
+      },
+      {
+        "id": "http-response",
+        "kind": "response",
+        "title": "Synthetic fixture: HTTP response",
+        "value": {
+          "status": 200,
+          "body": {
+            "recordId": "synthetic-record-1",
+            "queuedJobs": 2
+          }
+        },
+        "sourceRefs": [],
+        "sequence": 1,
+        "at": "2026-10-19T10:00:02.000Z"
+      },
+      {
+        "id": "record-change",
+        "kind": "record",
+        "title": "Synthetic fixture: Record change",
+        "value": {
+          "before": {
+            "attempts": 1,
+            "status": "pending"
+          },
+          "after": {
+            "attempts": 2,
+            "status": "queued"
+          }
+        },
+        "sourceRefs": [],
+        "sequence": 2,
+        "at": "2026-10-19T10:00:03.000Z"
+      },
+      {
+        "id": "retry-event",
+        "kind": "event",
+        "title": "Synthetic fixture: Emitted event",
+        "value": [
+          {
+            "type": "sync.retry_requested",
+            "attempt": 2
+          }
+        ],
+        "sourceRefs": [],
+        "sequence": 3,
+        "at": "2026-10-19T10:00:04.000Z"
+      },
+      {
+        "id": "queued-jobs",
+        "kind": "job",
+        "title": "Synthetic fixture: Queued jobs",
+        "value": [
+          {
+            "type": "SyncRecord"
+          },
+          {
+            "type": "SyncRecord"
+          }
+        ],
+        "sourceRefs": [],
+        "sequence": 4,
+        "at": "2026-10-19T10:00:05.000Z"
+      },
+      {
+        "id": "scenario-output",
+        "kind": "output",
+        "title": "Synthetic fixture: Retry result",
+        "value": {
+          "jobCount": 2,
+          "eventCount": 1
+        },
+        "sourceRefs": [],
+        "sequence": 5,
+        "at": "2026-10-19T10:00:06.000Z"
+      },
+      {
+        "id": "retry-assertion",
+        "kind": "assertion",
+        "title": "Synthetic fixture: Exactly one retry",
+        "value": {
+          "outcome": "failed",
+          "expected": 1,
+          "actual": 2
+        },
+        "sourceRefs": [],
+        "sequence": 6,
+        "at": "2026-10-19T10:00:07.000Z"
+      },
+      {
+        "id": "old-app-new-schema",
+        "kind": "assertion",
+        "title": "Synthetic fixture: Old app on expanded schema",
+        "value": {
+          "outcome": "passed",
+          "actual": "compatible",
+          "context": {
+            "appRevision": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "schemaVersion": "2"
+          }
+        },
+        "sourceRefs": [],
+        "sequence": 7,
+        "at": "2026-10-19T10:00:08.000Z"
+      }
+    ],
+    "capture": {
+      "status": "complete",
+      "issues": [],
+      "protocolVersion": 1,
+      "receivedObservations": 8,
+      "storedObservations": 8
+    }
+  },
+  {
+    "version": 1,
+    "runId": "synthetic-head",
+    "target": {
+      "owner": "acme",
+      "repo": "storefront",
+      "number": 4182
+    },
+    "scenario": {
+      "id": "sync-retries",
+      "version": "1",
+      "title": "Synthetic retry viewer fixture"
+    },
+    "inputs": {
+      "recordId": "synthetic-record-1",
+      "attempts": 1
+    },
+    "environment": {
+      "fixture": "synthetic-viewer-data",
+      "schemaVersion": "2"
+    },
+    "inputDigest": "03a7c56527b42b00816fa1127f4ad974d8b1536b7166c13affe4cb6e4a757e4e",
+    "environmentDigest": "98c32ff0c8b4d58abe4086f6e41b7d0e588cdcde040f7c813c2f6904a1334331",
+    "goalIds": [
+      "failed-syncs-retry-automatically-with-backoff"
+    ],
+    "sourceRefs": [
+      {
+        "owner": "acme",
+        "repo": "storefront",
+        "revision": "4182def000000000000000000000000000000000",
+        "path": "app/models/order_sync.rb",
+        "side": "RIGHT",
+        "startLine": 6,
+        "endLine": 6
+      }
+    ],
+    "provenance": {
+      "producer": {
+        "name": "synthetic-viewer-fixture",
+        "version": "1"
+      },
+      "origin": "imported",
+      "revision": "4182def000000000000000000000000000000000",
+      "repository": {
+        "owner": "acme",
+        "repo": "storefront"
+      },
+      "worktree": {
+        "before": {
+          "dirty": false,
+          "fingerprint": "synthetic-clean-4182def000000000000000000000000000000000"
+        },
+        "after": {
+          "dirty": false,
+          "fingerprint": "synthetic-clean-4182def000000000000000000000000000000000"
+        }
+      }
+    },
+    "process": {
+      "argv": [
+        "synthetic-viewer-fixture",
+        "retry"
+      ],
+      "cwd": ".",
+      "startedAt": "2026-10-19T10:00:00.000Z",
+      "finishedAt": "2026-10-19T10:00:10.000Z",
+      "exitCode": 0,
+      "signal": null,
+      "termination": "exited",
+      "stdout": "Synthetic viewer data; this fixture is not a recorder artifact.",
+      "stderr": "",
+      "stdoutTruncated": false,
+      "stderrTruncated": false
+    },
+    "observations": [
+      {
+        "id": "request-input",
+        "kind": "input",
+        "title": "Synthetic fixture: Declared request",
+        "value": {
+          "recordId": "synthetic-record-1",
+          "attempts": 1
+        },
+        "sourceRefs": [
+          {
+            "owner": "acme",
+            "repo": "storefront",
+            "revision": "4182def000000000000000000000000000000000",
+            "path": "app/models/order_sync.rb",
+            "side": "RIGHT",
+            "startLine": 6,
+            "endLine": 6
+          }
+        ],
+        "sequence": 0,
+        "at": "2026-10-19T10:00:01.000Z"
+      },
+      {
+        "id": "http-response",
+        "kind": "response",
+        "title": "Synthetic fixture: HTTP response",
+        "value": {
+          "status": 202,
+          "body": {
+            "recordId": "synthetic-record-1",
+            "queuedJobs": 1
+          }
+        },
+        "sourceRefs": [
+          {
+            "owner": "acme",
+            "repo": "storefront",
+            "revision": "4182def000000000000000000000000000000000",
+            "path": "app/models/order_sync.rb",
+            "side": "RIGHT",
+            "startLine": 6,
+            "endLine": 6
+          }
+        ],
+        "sequence": 1,
+        "at": "2026-10-19T10:00:02.000Z"
+      },
+      {
+        "id": "record-change",
+        "kind": "record",
+        "title": "Synthetic fixture: Record change",
+        "value": {
+          "before": {
+            "attempts": 1,
+            "status": "pending"
+          },
+          "after": {
+            "attempts": 2,
+            "status": "queued"
+          }
+        },
+        "sourceRefs": [
+          {
+            "owner": "acme",
+            "repo": "storefront",
+            "revision": "4182def000000000000000000000000000000000",
+            "path": "app/models/order_sync.rb",
+            "side": "RIGHT",
+            "startLine": 6,
+            "endLine": 6
+          }
+        ],
+        "sequence": 2,
+        "at": "2026-10-19T10:00:03.000Z"
+      },
+      {
+        "id": "retry-event",
+        "kind": "event",
+        "title": "Synthetic fixture: Emitted event",
+        "value": [
+          {
+            "type": "sync.retry_requested",
+            "attempt": 2
+          }
+        ],
+        "sourceRefs": [
+          {
+            "owner": "acme",
+            "repo": "storefront",
+            "revision": "4182def000000000000000000000000000000000",
+            "path": "app/models/order_sync.rb",
+            "side": "RIGHT",
+            "startLine": 6,
+            "endLine": 6
+          }
+        ],
+        "sequence": 3,
+        "at": "2026-10-19T10:00:04.000Z"
+      },
+      {
+        "id": "queued-jobs",
+        "kind": "job",
+        "title": "Synthetic fixture: Queued jobs",
+        "value": [
+          {
+            "type": "SyncRecord"
+          }
+        ],
+        "sourceRefs": [
+          {
+            "owner": "acme",
+            "repo": "storefront",
+            "revision": "4182def000000000000000000000000000000000",
+            "path": "app/models/order_sync.rb",
+            "side": "RIGHT",
+            "startLine": 6,
+            "endLine": 6
+          }
+        ],
+        "sequence": 4,
+        "at": "2026-10-19T10:00:05.000Z"
+      },
+      {
+        "id": "scenario-output",
+        "kind": "output",
+        "title": "Synthetic fixture: Retry result",
+        "value": {
+          "jobCount": 1,
+          "eventCount": 1
+        },
+        "sourceRefs": [
+          {
+            "owner": "acme",
+            "repo": "storefront",
+            "revision": "4182def000000000000000000000000000000000",
+            "path": "app/models/order_sync.rb",
+            "side": "RIGHT",
+            "startLine": 6,
+            "endLine": 6
+          }
+        ],
+        "sequence": 5,
+        "at": "2026-10-19T10:00:06.000Z"
+      },
+      {
+        "id": "retry-assertion",
+        "kind": "assertion",
+        "title": "Synthetic fixture: Exactly one retry",
+        "value": {
+          "outcome": "passed",
+          "expected": 1,
+          "actual": 1
+        },
+        "sourceRefs": [
+          {
+            "owner": "acme",
+            "repo": "storefront",
+            "revision": "4182def000000000000000000000000000000000",
+            "path": "app/models/order_sync.rb",
+            "side": "RIGHT",
+            "startLine": 6,
+            "endLine": 6
+          }
+        ],
+        "sequence": 6,
+        "at": "2026-10-19T10:00:07.000Z"
+      },
+      {
+        "id": "backfill-output",
+        "kind": "output",
+        "title": "Synthetic fixture: Backfill counts",
+        "value": {
+          "state": "completed",
+          "processed": 12,
+          "remaining": 0
+        },
+        "sourceRefs": [
+          {
+            "owner": "acme",
+            "repo": "storefront",
+            "revision": "4182def000000000000000000000000000000000",
+            "path": "app/models/order_sync.rb",
+            "side": "RIGHT",
+            "startLine": 6,
+            "endLine": 6
+          }
+        ],
+        "sequence": 7,
+        "at": "2026-10-19T10:00:08.000Z"
+      }
+    ],
+    "capture": {
+      "status": "complete",
+      "issues": [],
+      "protocolVersion": 1,
+      "receivedObservations": 8,
+      "storedObservations": 8
+    }
+  },
+  {
+    "version": 1,
+    "runId": "synthetic-partial",
+    "target": {
+      "owner": "acme",
+      "repo": "storefront",
+      "number": 4182
+    },
+    "scenario": {
+      "id": "sync-retries",
+      "version": "1",
+      "title": "Synthetic partial capture with unknown worktree"
+    },
+    "inputs": {
+      "recordId": "synthetic-record-1",
+      "attempts": 1
+    },
+    "environment": {
+      "fixture": "synthetic-viewer-data",
+      "schemaVersion": "2"
+    },
+    "inputDigest": "03a7c56527b42b00816fa1127f4ad974d8b1536b7166c13affe4cb6e4a757e4e",
+    "environmentDigest": "98c32ff0c8b4d58abe4086f6e41b7d0e588cdcde040f7c813c2f6904a1334331",
+    "goalIds": [
+      "failed-syncs-retry-automatically-with-backoff"
+    ],
+    "sourceRefs": [],
+    "provenance": {
+      "producer": {
+        "name": "synthetic-viewer-fixture",
+        "version": "1"
+      },
+      "origin": "imported",
+      "revision": "4182def000000000000000000000000000000000",
+      "repository": {
+        "owner": "acme",
+        "repo": "storefront"
+      },
+      "worktree": {
+        "before": {
+          "dirty": null,
+          "fingerprint": null
+        },
+        "after": {
+          "dirty": null,
+          "fingerprint": null
+        }
+      }
+    },
+    "process": {
+      "argv": [
+        "synthetic-viewer-fixture",
+        "retry"
+      ],
+      "cwd": ".",
+      "startedAt": "2026-10-19T10:00:00.000Z",
+      "finishedAt": "2026-10-19T10:00:10.000Z",
+      "exitCode": 1,
+      "signal": null,
+      "termination": "exited",
+      "stdout": "Synthetic viewer data; this fixture is not a recorder artifact.",
+      "stderr": "",
+      "stdoutTruncated": false,
+      "stderrTruncated": false
+    },
+    "observations": [
+      {
+        "id": "request-input",
+        "kind": "input",
+        "title": "Synthetic fixture: Declared request",
+        "value": {
+          "recordId": "synthetic-record-1",
+          "attempts": 1
+        },
+        "sourceRefs": [
+          {
+            "owner": "acme",
+            "repo": "storefront",
+            "revision": "4182def000000000000000000000000000000000",
+            "path": "app/models/order_sync.rb",
+            "side": "RIGHT",
+            "startLine": 6,
+            "endLine": 6
+          }
+        ],
+        "sequence": 0,
+        "at": "2026-10-19T10:00:01.000Z"
+      },
+      {
+        "id": "new-app-old-schema",
+        "kind": "assertion",
+        "title": "Synthetic negative compatibility check",
+        "value": {
+          "outcome": "passed",
+          "expected": "incompatible",
+          "actual": "incompatible",
+          "context": {
+            "appRevision": "4182def000000000000000000000000000000000",
+            "schemaVersion": "1"
+          }
+        },
+        "sourceRefs": [],
+        "sequence": 1,
+        "at": "2026-10-19T10:00:02.000Z"
+      }
+    ],
+    "capture": {
+      "status": "partial",
+      "issues": [
+        "Synthetic malformed trace after two retained observations"
+      ],
+      "protocolVersion": 1,
+      "receivedObservations": 3,
+      "storedObservations": 2
+    }
+  }
+]

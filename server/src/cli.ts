@@ -4,7 +4,7 @@ import { existsSync, mkdirSync, openSync, readFileSync, realpathSync, rmSync, wr
 import { constants } from "node:os";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { buildAnalysis, courseInputSchema, mergeCourse, onCourse, type Analysis, type GhFile, type GhPull } from "@review-canvas/shared";
+import { buildAnalysis, courseInputSchema, emptyState, mergeCourse, onCourse, type Analysis, type ExecutionBundle, type GhFile, type GhPull, type RevisionFilePayload, type RevisionFileChange } from "@review-canvas/shared";
 import { buildApp } from "./app.js";
 import { courseTemplate, renderBrief } from "./brief.js";
 import { baseUrl, home, port, readConfig, reviewUrl, writeConfig } from "./config.js";
@@ -12,7 +12,8 @@ import { fetchFileAt, fetchFiles, fetchHeads, fetchPull, GhError, parsePrRef } f
 import { compareEvidence, getDeployment, getEvidenceIndex, getEvidenceRun, importDeployment, importEvidence } from "./evidence.js";
 import { recordExecution } from "./recorder.js";
 import { getRevisions } from "./revisions.js";
-import { loadAnalysis, loadReview, reviewPath, saveAnalysis, saveHeadFile, saveReview } from "./store.js";
+import { atomicSidecar, pathDigest } from "./evidenceStore.js";
+import { loadAnalysis, loadReview, reviewPath, saveAnalysis, saveHeadFile, saveReview, saveState } from "./store.js";
 
 const USAGE = `review-canvas: review a pull request on an infinite canvas
 
@@ -136,6 +137,42 @@ export function publish(id: string, path?: string) {
   const review = mergeCourse(analysis, parsed.data);
   saveReview(review);
   refreshBrief(id);
+  return review;
+}
+
+/** Load the built-in, explicitly synthetic course and evidence without network access. */
+export function loadDemo() {
+  const root = new URL("../../test/fixtures/", import.meta.url);
+  const fixture = (name: string) => readJson(fileURLToPath(new URL(`sync-retries.${name}.json`, root)));
+  const {pull, files} = readJson(fileURLToPath(new URL("sync-retries.json", root))) as {pull: GhPull; files: GhFile[]};
+  const revisions = fixture("revisions") as {
+    currentCreatedAt: string;
+    baseline: {reviewId: string; headSha: string; createdAt: string; reviewedAt: string};
+    inventory: {beforeSha: string; afterSha: string; files: RevisionFileChange[]};
+    files: RevisionFilePayload[];
+  };
+  const analysis = {...buildAnalysis(pull, files, {}), createdAt: revisions.currentCreatedAt};
+  saveAnalysis(analysis);
+  const review = publish(analysis.id, fileURLToPath(new URL("sync-retries.course.json", root)));
+  const heads = fixture("heads") as Record<string, string>;
+  for (const file of analysis.files) if (heads[file.path] !== undefined) saveHeadFile(analysis.id, file.id, heads[file.path]!);
+
+  const baseline = revisions.baseline;
+  const earlier = {...buildAnalysis({...pull, head: {...pull.head, sha: baseline.headSha}}, [], {}), id: baseline.reviewId, createdAt: baseline.createdAt};
+  saveAnalysis(earlier);
+  const firstGoal = review.course.goals[0]!;
+  saveReview(mergeCourse(earlier, courseInputSchema.parse({
+    sentence: "Synthetic earlier reviewed snapshot",
+    goals: [{title: firstGoal.title, src: firstGoal.src, quote: firstGoal.quote, stops: [], gap: "Synthetic baseline stores the review mark; source is in the cached endpoint comparison."}],
+    hunks: {}, links: [],
+  })));
+  if (!existsSync(reviewPath(earlier.id, "state.json"))) saveState(earlier.id, {...emptyState(), reviewed: {[firstGoal.id]: baseline.reviewedAt}});
+  const cache = `revisions/${revisions.inventory.beforeSha}-${revisions.inventory.afterSha}`;
+  atomicSidecar(reviewPath(analysis.id, `${cache}/inventory.json`), revisions.inventory);
+  for (const file of revisions.files) atomicSidecar(reviewPath(analysis.id, `${cache}/files/${pathDigest(file.change.path)}.json`), file);
+  for (const bundle of fixture("evidence") as ExecutionBundle[]) importEvidence(analysis.id, bundle, {origin: "synthetic-fixture"});
+  importDeployment(analysis.id, fixture("deployment"));
+  refreshBrief(analysis.id);
   return review;
 }
 
@@ -272,17 +309,11 @@ export async function main(argv: string[]) {
       return;
     }
     case "demo": {
-      const root = new URL("../../test/fixtures/", import.meta.url);
-      const { pull, files } = JSON.parse(readFileSync(new URL("sync-retries.json", root), "utf8")) as { pull: GhPull; files: GhFile[] };
-      const analysis = buildAnalysis(pull, files, {});
-      saveAnalysis(analysis);
-      const review = publish(analysis.id, fileURLToPath(new URL("sync-retries.course.json", root)));
-      // Seed the head-file cache so Open file and Show more work without `gh`.
-      const heads = JSON.parse(readFileSync(new URL("sync-retries.heads.json", root), "utf8")) as Record<string, string>;
-      for (const f of analysis.files) if (heads[f.path] !== undefined) saveHeadFile(analysis.id, f.id, heads[f.path]!);
+      const review = loadDemo();
       for (const w of review.warnings) console.log(`warning: ${w}`);
       await up();
-      console.log(`Open: ${reviewUrl(analysis.id)}`);
+      console.log("Loaded synthetic viewer fixtures; these are not recorded execution results.");
+      console.log(`Open: ${reviewUrl(review.analysis.id)}`);
       return;
     }
     case "show": {
