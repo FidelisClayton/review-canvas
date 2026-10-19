@@ -181,7 +181,6 @@ function tailscaleName(): string {
   return status.Self.DNSName.replace(/\.$/, "");
 }
 
-/** Parse only this command's options; the recorder's child argv is split off first. */
 function options(args: string[], positionalCount: number, values: string[] = [], flags: string[] = []) {
   const positional: string[] = [];
   const parsed = new Map<string, string>();

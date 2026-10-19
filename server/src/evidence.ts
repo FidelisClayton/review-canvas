@@ -21,7 +21,8 @@ export function importEvidence(id: string, input: unknown, options: {origin?: Im
   const refs = [...bundle.sourceRefs, ...bundle.observations.flatMap(observation => observation.sourceRefs)];
   if (refs.some(ref => !sameRepository(bundle.target, ref) || ref.revision !== bundle.provenance.revision)) throw new EvidenceError("Source reference must use the run repository and revision.");
   const warnings = bindEvidenceGoals(bundle, review).filter(binding => binding.status === "unbound").map(binding => `Unbound goal: ${binding.goalId}`);
-  for (const ref of refs) if (resolveSourceRef(ref, relatedReviews(review)).status === "unavailable") warnings.push(`Unavailable source: ${ref.path}@${ref.revision}`);
+  const reviews = refs.length ? relatedReviews(review) : [];
+  for (const ref of refs) if (resolveSourceRef(ref, reviews).status === "unavailable") warnings.push(`Unavailable source: ${ref.path}@${ref.revision}`);
   return saveStoredExecution(id, {bundle, receipt: {importedAt: (options.now ?? new Date()).toISOString(), artifactDigest: artifactDigest(bundle), origin: options.origin ?? "imported-file", warnings}});
 }
 export function getEvidenceRun(id: string, runId: string): StoredExecution {
