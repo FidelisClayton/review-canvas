@@ -16,7 +16,7 @@ Primary: Clayton, a working engineer reviewing teammates' pull requests, often l
 
 ## Product Purpose
 
-The reviewer asks their coding agent (Claude Code or Codex) to review a PR with the `review-canvas` skill; the agent reads the PR and its Linear ticket and turns the ticket's goals into a course: for each goal, the changed chunks that do it, ending with the tests that prove it. Success: the reviewer understands the change faster than in GitHub's alphabetical file list, sees which code and tests answer each goal, misses less, and knows when they have reviewed everything.
+The reviewer asks their coding agent (Claude Code or Codex) to review a PR with the `review-canvas` skill; the agent reads the PR and its Linear ticket and turns the ticket's goals into a course: for each goal, the changed chunks that do it, ending with the test source that checks it. Success: the reviewer understands the change faster than in GitHub's alphabetical file list, sees which code and tests answer each goal, misses less, and knows when they have reviewed everything.
 
 ## Positioning
 
@@ -46,6 +46,11 @@ GitHub orders files alphabetically. This tool orders changes by what the ticket 
 - A review with no agent (`review-canvas open`) opens in the Map view only. A review published in the older file-based format asks to be republished with the skill.
 - GitHub access goes through the `gh` CLI with the reviewer's own login; no tokens are stored.
 - The organizing agent is the reviewer's own Claude Code or Codex session, through a skill. The server never calls a model or Linear.
+- Test stops show source, with no execution verdict. Recorded runs keep process exits, explicit assertion outcomes, capture completeness and freshness separate. Playback reads artifacts and never executes application code.
+- Recording runs an explicit local argv. Imported bundles retain their producer-reported provenance and receive a server-owned `imported-file` receipt; the importer cannot authenticate the producer. Unknown, dirty, changed and historical provenance stays visible.
+- Run comparison uses explicit scenario IDs, versions, inputs, environment and producer protocol. Incompatible pairs show reasons; differences are observations, not regression verdicts. Source references use full repository, exact revision, path, side and lines, without adding causal code links.
+- Since-reviewed comparison selects an earlier review of the same repository and PR, compares exact commit trees and preserves each review's own progress. A legacy review without a base SHA cannot infer one from today's branch.
+- Deployment analysis separates declared, inferred and observed compatibility, backfill and rollback claims. Observed claims require matching imported observations; missing evidence means unknown or not run, never safe by default. See [EVIDENCE.md](EVIDENCE.md).
 
 ## Evidence on Hand
 

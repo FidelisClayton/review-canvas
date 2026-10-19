@@ -1,6 +1,6 @@
 # Review Canvas
 
-Review a pull request one goal at a time, with the chunks and tests that prove each goal, in the
+Review a pull request one goal at a time, with the chunks and test source that check each goal, in the
 order your coding agent planned.
 
 Ask Claude Code or Codex to review a PR with the `review-canvas` skill. The agent reads the PR
@@ -24,6 +24,10 @@ On either view:
   goal.
 
 You draft comments on lines and post one GitHub review when you are done.
+
+Evidence adds recorded command output and structured observations, explicit run comparison,
+exact source changes since a reviewed revision, and deployment analysis. Reading test source
+does not establish that a test ran or passed. Playback only reads stored data.
 
 ## How it works
 
@@ -87,6 +91,17 @@ Then, in Claude Code or Codex:
 | `review-canvas demo` | Load the synthetic demo PR. |
 | `review-canvas up` · `stop` · `restart` · `serve` | Manage the server (port 4790, bound to 127.0.0.1). |
 | `review-canvas setup [--public-url URL]` | Choose the URL reviews open at. With no URL, uses `tailscale serve`. |
+| `review-canvas evidence record <id> --scenario <manifest.json> --out <bundle.json> [--cwd <path>] [--timeout-ms <ms>] -- <command> [args...]` | Run explicit argv locally and write an artifact; does not import it. |
+| `review-canvas evidence import <id> <bundle.json>` | Validate and import a bundle with an `imported-file` receipt. |
+| `review-canvas evidence list <id> --json` | List runs, provenance, capture gaps, freshness and goal bindings. |
+| `review-canvas evidence show <id> <run-id> --json` | Inspect the bundle and its import receipt. |
+| `review-canvas evidence compare <id> --left <run> --right <run> [--mode runs\|base-head] --json` | Compare selected runs or report why they are incomparable. |
+| `review-canvas revisions <id> [--baseline <review-id>] --json` | Select a reviewed baseline and compare exact endpoint trees. |
+| `review-canvas deployment import <id> <file.json>` · `deployment show <id> --json` | Store or inspect deployment claims and evidence qualifications. |
+
+The inspection commands also work without `--json`. See [docs/EVIDENCE.md](docs/EVIDENCE.md)
+for the manifest, line protocol, executable Node example and deployment fields. New preparation
+rechecks the repository, PR and endpoint SHAs after fetching files, and refuses a mixed snapshot.
 
 ## Keyboard
 
