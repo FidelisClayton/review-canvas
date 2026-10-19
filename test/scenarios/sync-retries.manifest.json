@@ -1,0 +1,8 @@
+{
+  "version": 1,
+  "scenario": { "id": "sync-retries", "version": "1", "title": "Synthetic retry synchronization" },
+  "inputs": { "recordId": "synthetic-record-1", "attempts": 1 },
+  "environment": { "fixture": "synthetic-in-memory-http", "schemaVersion": "1" },
+  "goalIds": ["retry"],
+  "sourceRefs": []
+}
