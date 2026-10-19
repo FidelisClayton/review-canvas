@@ -1,5 +1,6 @@
 import { spawn } from "node:child_process";
-import { noiseOf, type GhFile, type GhPull, type Draft, type PrMeta, type Verdict } from "@review-canvas/shared";
+import { isUtf8 } from "node:buffer";
+import { noiseOf, type GhFile, type GhPull, type Draft, type PrMeta, type Verdict, type RevisionTreeEntry } from "@review-canvas/shared";
 
 // All GitHub access goes through the `gh` CLI, so the app uses the reviewer's own login and
 // never stores a token.
@@ -9,15 +10,29 @@ export class GhError extends Error {}
 /** Encodes each path segment, so a `?`, `#` or `&` in a file name cannot change the query or the ref. */
 export const encodePath = (p: string) => p.split("/").map(encodeURIComponent).join("/");
 
-function gh(args: string[], input?: string): Promise<string> {
+function gh(args: string[], input?: string, maxBytes?: number): Promise<string> {
   return new Promise((resolve, reject) => {
     const child = spawn("gh", args, { stdio: ["pipe", "pipe", "pipe"] });
-    let out = "";
+    const output: Buffer[] = [];
     let err = "";
-    child.stdout.on("data", (d: Buffer) => (out += d.toString()));
+    let bytes = 0;
+    child.stdout.on("data", (d: Buffer) => {
+      bytes += d.length;
+      if (maxBytes !== undefined && bytes > maxBytes) {
+        reject(new GhError("Source exceeds the 1 MiB size limit."));
+        child.kill();
+        return;
+      }
+      output.push(d);
+    });
     child.stderr.on("data", (d: Buffer) => (err += d.toString()));
     child.on("error", (e) => reject(new GhError(`Could not run gh: ${e.message}. Install the GitHub CLI and run \`gh auth login\`.`)));
-    child.on("close", (code) => (code === 0 ? resolve(out) : reject(new GhError(err.trim() || `gh exited with ${code}`))));
+    child.on("close", (code) => {
+      if (code !== 0) return reject(new GhError(err.trim() || `gh exited with ${code}`));
+      const buffer = Buffer.concat(output);
+      if (maxBytes !== undefined && !isUtf8(buffer)) return reject(new GhError("Binary non-UTF-8 source is unavailable."));
+      resolve(buffer.toString("utf8"));
+    });
     if (input !== undefined) child.stdin.end(input);
     else child.stdin.end();
   });
@@ -74,8 +89,8 @@ export async function fetchHeads(ref: PrRef, sha: string, files: GhFile[]): Prom
 
 
 /** A file's full text at a commit. */
-export function fetchFileAt(ref: PrRef, sha: string, path: string): Promise<string> {
-  return gh(["api", "-H", "Accept: application/vnd.github.raw", `repos/${ref.owner}/${ref.repo}/contents/${encodePath(path)}?ref=${sha}`]);
+export function fetchFileAt(ref: PrRef, sha: string, path: string, maxBytes?: number): Promise<string> {
+  return gh(["api", "-H", "Accept: application/vnd.github.raw", `repos/${ref.owner}/${ref.repo}/contents/${encodePath(path)}?ref=${sha}`], undefined, maxBytes);
 }
 
 /** Posts one review with all draft comments. Only ever called from an explicit confirm in the UI. */
@@ -88,4 +103,35 @@ export async function submitReview(pr: PrMeta, event: Verdict, body: string, dra
   };
   const res = JSON.parse(await gh(["api", "--method", "POST", `repos/${pr.owner}/${pr.repo}/pulls/${pr.number}/reviews`, "--input", "-"], JSON.stringify(payload))) as { html_url: string };
   return { url: res.html_url };
+}
+
+export interface GitHubTreeResponse {
+  tree: RevisionTreeEntry[];
+  truncated: boolean;
+}
+export interface GitHubReadTransport {
+  readTree(ref: PrRef, sha: string, recursive: boolean): Promise<GitHubTreeResponse>;
+  readFile(ref: PrRef, sha: string, path: string): Promise<string>;
+}
+export const githubReadTransport: GitHubReadTransport = {
+  readTree: async (ref, sha, recursive) => JSON.parse(await gh(["api", `repos/${ref.owner}/${ref.repo}/git/trees/${sha}${recursive ? "?recursive=1" : ""}`])) as GitHubTreeResponse,
+  readFile: (ref, sha, path) => fetchFileAt(ref, sha, path, 1024 * 1024),
+};
+
+/** Recursive truncation is never a complete inventory; walk each subtree explicitly. */
+export async function fetchExactTree(ref: PrRef, sha: string, transport: Pick<GitHubReadTransport, "readTree"> = githubReadTransport): Promise<RevisionTreeEntry[]> {
+  const initial = await transport.readTree(ref, sha, true);
+  if (!initial.truncated) return initial.tree.filter(entry => entry.type !== "tree").sort((a, b) => a.path.localeCompare(b.path));
+  const entries: RevisionTreeEntry[] = [];
+  async function walk(treeSha: string, prefix: string) {
+    const response = await transport.readTree(ref, treeSha, false);
+    if (response.truncated) throw new GhError("Nonrecursive GitHub tree is truncated; exact inventory is unavailable.");
+    for (const entry of response.tree) {
+      const path = prefix + entry.path;
+      if (entry.type === "tree") await walk(entry.sha, `${path}/`);
+      else entries.push({...entry, path});
+    }
+  }
+  await walk(sha, "");
+  return entries.sort((a, b) => a.path.localeCompare(b.path));
 }

@@ -28,6 +28,10 @@ function writeJson(path: string, value: unknown) {
 }
 
 export function saveAnalysis(analysis: Analysis) {
+  const existing = loadAnalysis(analysis.id) ?? readJson<Review>(join(dir(analysis.id), "review.json"))?.analysis;
+  if (existing && (existing.pr.owner !== analysis.pr.owner || existing.pr.repo !== analysis.pr.repo || existing.pr.number !== analysis.pr.number || existing.pr.headSha !== analysis.pr.headSha)) {
+    throw new Error(`Review identity collision: ${analysis.id}.`);
+  }
   mkdirSync(dir(analysis.id), { recursive: true });
   writeJson(join(dir(analysis.id), "analysis.json"), analysis);
 }

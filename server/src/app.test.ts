@@ -109,3 +109,30 @@ describe("head files", () => {
     expect(res.json()).toEqual({ path: file.path, lines: ["line one", "line two"] });
   });
 });
+
+describe("revision API boundaries", () => {
+  it("uses selected exact endpoints through the injected transport and does not change state", async () => {
+    const {draftReview, emptyState} = await import("@review-canvas/shared");
+    const {buildApp} = await import("./app.js");
+    const beforeSha = "b".repeat(40); const afterSha = "c".repeat(40);
+    const current = {...analysis, id: "api-current", createdAt: "2026-10-19T12:00:00Z", pr: {...analysis.pr, headSha: afterSha}};
+    const old = {...analysis, id: "api-baseline", createdAt: "2026-10-19T09:00:00Z", pr: {...analysis.pr, headSha: beforeSha}};
+    store.saveAnalysis(current); store.saveAnalysis(old);
+    const review = draftReview(old); review.course.goals = [{id: "done", title: "Done", src: "PR", quote: "Done", stops: []}]; store.saveReview(review);
+    store.saveState(old.id, {...emptyState(), reviewed: {done: "2026-10-19T10:00:00Z"}});
+    const readFile = vi.fn(async (_ref: unknown, sha: string) => sha === beforeSha ? "before\n" : "after\n");
+    const readTree = vi.fn(async (_ref: unknown, sha: string) => ({truncated: false, tree: [{path: "app/code.ts", sha, mode: "100644", type: "blob"}]}));
+    const local = await buildApp({github: {readFile, readTree}});
+    const state = store.loadState(current.id); const url = `/api/reviews/${current.id}/revisions`;
+    try {
+      expect((await local.inject(url)).json()).toMatchObject({baseline: {reviewId: old.id}, comparison: {beforeSha, afterSha, status: "available", files: [{path: "app/code.ts"}]}});
+      expect((await local.inject(`${url}/file?baseline=${old.id}&path=app%2Fcode.ts`)).json()).toMatchObject({beforeSha, afterSha, file: {path: "app/code.ts"}});
+      expect(readFile.mock.calls.map(call => call[1])).toEqual([beforeSha, afterSha]);
+      expect((await local.inject(`${url}/file?baseline=${old.id}&path=..%2Fprivate`)).statusCode).toBe(400);
+      expect((await local.inject(`${url}/file?baseline=${old.id}&path=private`)).statusCode).toBe(404);
+      expect((await local.inject(`${url}/file?baseline=foreign&path=app%2Fcode.ts`)).statusCode).toBe(422);
+      expect((await local.inject(`${url}?baseline=..%2Fprivate`)).statusCode).toBe(400);
+      expect(readFile).toHaveBeenCalledTimes(2); expect(store.loadState(current.id)).toEqual(state);
+    } finally {await local.close();}
+  });
+});

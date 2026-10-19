@@ -4,12 +4,13 @@ import fastifyStatic from "@fastify/static";
 import Fastify, { type FastifyInstance } from "fastify";
 import { stateInputSchema, submitInputSchema, type ReviewPayload } from "@review-canvas/shared";
 import { webDist } from "./config.js";
-import { fetchFileAt, GhError, submitReview } from "./github.js";
+import { registerEvidenceRoutes } from "./evidenceRoutes.js";
+import { fetchFileAt, GhError, submitReview, type GitHubReadTransport } from "./github.js";
 import { loadAnalysis, listReviews, loadHeadFile, loadReview, loadState, saveHeadFile, saveState } from "./store.js";
 
 const SAFE_ID = /^[A-Za-z0-9._-]+$/;
 
-export async function buildApp(opts: { logger?: boolean } = {}): Promise<FastifyInstance> {
+export async function buildApp(opts: { logger?: boolean; github?: GitHubReadTransport } = {}): Promise<FastifyInstance> {
   const app = Fastify({ logger: opts.logger ?? false, bodyLimit: 2 * 1024 * 1024 });
 
   app.get("/api/health", async () => ({ ok: true, app: "review-canvas" }));
@@ -76,6 +77,8 @@ export async function buildApp(opts: { logger?: boolean } = {}): Promise<Fastify
       return reply.code(502).send({ error: message });
     }
   });
+
+  registerEvidenceRoutes(app, opts.github);
 
   const dist = webDist();
   if (existsSync(dist)) {
