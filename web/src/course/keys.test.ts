@@ -12,6 +12,19 @@ describe("keyAction", () => {
     expect(keyAction({ key: "J" }, none)).toBe("next-stop");
   });
 
+  it("excludes course shortcuts while evidence is open and lets Escape return to source", () => {
+    const evidence = { ...none, evidence: true };
+    for (const key of ["j", "k", "[", "]", "x", "f", "m", "g", "l"]) {
+      expect(keyAction({ key }, evidence)).toBeNull();
+    }
+    expect(keyAction({ key: "Escape" }, evidence)).toBe("close-evidence");
+  });
+
+  it("does not navigate the course while using a select", () => {
+    const select = { closest: (selector: string) => selector.includes("select") ? {} : null };
+    expect(keyAction({ key: "j", target: select }, none)).toBeNull();
+  });
+
   it("ignores auto-repeat for x", () => {
     expect(keyAction({ key: "x", repeat: true }, none)).toBeNull();
     expect(keyAction({ key: "j", repeat: true }, none)).toBe("next-stop");

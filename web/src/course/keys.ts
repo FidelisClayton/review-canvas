@@ -8,6 +8,7 @@ export type KeyAction =
   | "map-view"
   | "guided-view"
   | "toggle-layout"
+  | "close-evidence"
   | "close-drawer"
   | "close-review"
   | "close-composer"
@@ -28,12 +29,14 @@ export interface KeyContext {
   /** The review drawer is open. */
   review: boolean;
   composer: boolean;
+  evidence?: boolean;
 }
 
 /** `+`, `-` and `0` belong to the zoom hook, so they map to nothing here. */
 export function keyAction(e: KeyEventLike, ctx: KeyContext): KeyAction | null {
-  if ((e.target as { closest?: (s: string) => unknown } | null | undefined)?.closest?.("textarea,input,[contenteditable]")) return null;
+  if ((e.target as { closest?: (s: string) => unknown } | null | undefined)?.closest?.("textarea,input,select,[contenteditable]")) return null;
   if (e.metaKey || e.ctrlKey || e.altKey) return null;
+  if (ctx.evidence) return e.key === "Escape" ? "close-evidence" : null;
   switch (e.key.toLowerCase()) {
     case "escape":
       return ctx.drawer ? "close-drawer" : ctx.review ? "close-review" : ctx.composer ? "close-composer" : "clear-focus";

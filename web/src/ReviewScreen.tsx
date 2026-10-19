@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { buildView, type Draft, type Review, type ReviewState, type Verdict } from "@review-canvas/shared";
+import { buildView, type Draft, type ResolvedSourceRef, type Review, type ReviewState, type Verdict } from "@review-canvas/shared";
 import { fetchReview, saveState, submitReview } from "./api";
 import { ChunkDrawer } from "./course/ChunkDrawer";
 import { CoursePage } from "./course/CoursePage";
@@ -16,6 +16,8 @@ import { posIn } from "./course/RouteLayer";
 import { useReadObserver } from "./course/useReadObserver";
 import { useZoom } from "./course/useZoom";
 import { ReviewDrawer, TopBar } from "./panels";
+import { EvidencePanel } from "./evidence/EvidencePanel";
+import { currentSourceStop } from "./evidence/model";
 
 type Mode = "guided" | "map";
 type Layout = "canvas" | "diff";
@@ -70,6 +72,7 @@ function LoadedReview({ review, initial }: { review: Review; initial: ReviewStat
   const [drawer, setDrawer] = useState<DrawerTarget | null>(null);
   const [composer, setComposer] = useState<ComposerState | null>(null);
   const [reviewOpen, setReviewOpen] = useState(false);
+  const [evidenceOpen, setEvidenceOpen] = useState(false);
   const [courseOpen, setCourseOpen] = useState(false);
   const [focusOob, setFocusOob] = useState(false);
   const [reveal, setReveal] = useState<{ hunkId: string; n: number } | null>(null);
@@ -83,7 +86,7 @@ function LoadedReview({ review, initial }: { review: Review; initial: ReviewStat
 
   const vpRef = useRef<HTMLDivElement>(null);
   const worldRef = useRef<HTMLDivElement>(null);
-  const zoom = useZoom(vpRef, worldRef, layout === "canvas" || mode === "map");
+  const zoom = useZoom(vpRef, worldRef, !evidenceOpen && (layout === "canvas" || mode === "map"));
 
   // Guided and Map start at reading size.
   const { setZoom } = zoom;
@@ -100,8 +103,8 @@ function LoadedReview({ review, initial }: { review: Review; initial: ReviewStat
     return () => clearTimeout(t);
   }, [state, review.analysis.id, say]);
 
-  const live = useRef({ state, g, s, mode, layout, composer, drawer, reviewOpen, far: zoom.far, zoom: zoom.zoom });
-  live.current = { state, g, s, mode, layout, composer, drawer, reviewOpen, far: zoom.far, zoom: zoom.zoom };
+  const live = useRef({ state, g, s, mode, layout, composer, drawer, reviewOpen, evidenceOpen, far: zoom.far, zoom: zoom.zoom });
+  live.current = { state, g, s, mode, layout, composer, drawer, reviewOpen, evidenceOpen, far: zoom.far, zoom: zoom.zoom };
 
   // ---- scrolling: exact offsets, because scrollIntoView lands short while a smooth scroll runs ----
   const [scrollReq, setScrollReq] = useState<{ n: number; smooth: boolean; hunkId?: string; lineIndex?: number } | null>(null);
@@ -244,6 +247,9 @@ function LoadedReview({ review, initial }: { review: Review; initial: ReviewStat
           return switchMode("guided");
         case "toggle-layout":
           return live.current.mode === "guided" ? switchLayout(live.current.layout === "diff" ? "canvas" : "diff") : undefined;
+        case "close-evidence":
+          setEvidenceOpen(false);
+          return requestScroll(false);
         case "close-drawer":
           return setDrawer(null);
         case "close-review":
@@ -254,14 +260,14 @@ function LoadedReview({ review, initial }: { review: Review; initial: ReviewStat
           return setFocusing(false);
       }
     },
-    [move, go, toggleReviewed, switchMode, switchLayout, zoom],
+    [move, go, toggleReviewed, switchMode, switchLayout, zoom, requestScroll],
   );
   const actRef = useRef(act);
   actRef.current = act;
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      const { drawer, reviewOpen, composer } = live.current;
-      const a = keyAction(e, { drawer: !!drawer, review: reviewOpen, composer: !!composer });
+      const { drawer, reviewOpen, composer, evidenceOpen } = live.current;
+      const a = keyAction(e, { drawer: !!drawer, review: reviewOpen, composer: !!composer, evidence: evidenceOpen });
       if (!a) return;
       e.preventDefault();
       actRef.current(a);
@@ -274,10 +280,11 @@ function LoadedReview({ review, initial }: { review: Review; initial: ReviewStat
   useReadObserver({
     scrollerRef: vpRef,
     worldRef,
-    far: zoom.far,
-    scope: `${mode}:${layout}:${g}`,
+    far: zoom.far || evidenceOpen,
+    scope: `${mode}:${layout}:${g}:${evidenceOpen}`,
     isRead: (key) => !!live.current.state.read[key] || !!live.current.state.read[key.split("@")[0]!],
     onRead: (keys) => {
+      if (live.current.evidenceOpen) return;
       const at = new Date().toISOString();
       setState((st) => {
         const fresh = keys.filter((k) => !st.read[k]);
@@ -346,6 +353,21 @@ function LoadedReview({ review, initial }: { review: Review; initial: ReviewStat
     setState((st) => ({ ...st, submitted: res.submitted }));
   };
 
+  const closeEvidence = () => {
+    setEvidenceOpen(false);
+    requestScroll(false);
+  };
+  const evidenceSource = (resolution: ResolvedSourceRef) => {
+    const target = currentSourceStop(resolution, review);
+    if (!target) return;
+    setMode("guided");
+    setG(target.goalIndex);
+    setS(target.stopIndex);
+    setFocusing(false);
+    setEvidenceOpen(false);
+    requestScroll(false);
+  };
+
   const goal = g >= 0 ? idx.goals[g] ?? null : null;
   const chunkless = useMemo(() => chunklessFiles(review), [review]);
   const pct = Math.round(zoom.zoom * 100);
@@ -353,7 +375,12 @@ function LoadedReview({ review, initial }: { review: Review; initial: ReviewStat
   return (
     <CourseContext.Provider value={ctx}>
       <div className="app">
-        <TopBar review={review} drafts={state.drafts.length} mode={mode} onMode={switchMode} layout={layout} onLayout={switchLayout} onReview={() => setReviewOpen((o) => !o)} onCourse={() => setCourseOpen((o) => !o)} courseOpen={courseOpen} />
+        <TopBar review={review} drafts={state.drafts.length} mode={mode} onMode={(next) => { setEvidenceOpen(false); switchMode(next); }} layout={layout} onLayout={(next) => { setEvidenceOpen(false); switchLayout(next); }} onReview={() => { setEvidenceOpen(false); setReviewOpen((o) => !o); }} onCourse={() => setCourseOpen((o) => !o)} courseOpen={courseOpen} evidenceOpen={evidenceOpen} onEvidence={() => {
+          if (evidenceOpen) return closeEvidence();
+          setDrawer(null);
+          setReviewOpen(false);
+          setEvidenceOpen(true);
+        }} />
         <GoalSheet
           open={courseOpen}
           idx={idx}
@@ -372,73 +399,76 @@ function LoadedReview({ review, initial }: { review: Review; initial: ReviewStat
           }}
         />
         <div className={`stage${focusing ? " focusing" : ""}${mode === "map" ? " map" : ""}`}>
-          {mode === "map" ? (
-            <div className="mapbar">
-              <b>Map</b>
-              {hasGoals ? "Every changed file on its layer, every chunk open. The numbers on each chunk are the goals it serves; click one to review that goal." : "Every changed file on its layer, every chunk open. No agent has planned goals for this PR yet."}
-            </div>
-          ) : (
-            goal && (
-              <GoalBar
-                goal={goal}
-                gi={g}
-                realCount={idx.realCount}
-                state={state}
-                chunkless={chunkless}
-                onToggleReviewed={toggleReviewed}
-                onOpenFile={ctx.openFile}
-              />
-            )
-          )}
-          <div
-            className="viewport"
-            ref={vpRef}
-            onPointerDown={() => focusing && setFocusing(false)}
-            onWheel={(e) => focusing && !e.ctrlKey && Math.abs(e.deltaY) > 40 && setFocusing(false)}
-          >
-            <div className={`world${zoom.far ? " far" : ""}`} ref={worldRef}>
-              {mode === "map" ? (
-                <MapView focusOob={focusOob} onGoalBadge={goToGoalId} far={zoom.far} onFarClick={zoom.zoomToElement} reveal={reveal} />
-              ) : layout === "diff" ? (
-                <DiffColumn
+          {evidenceOpen && <EvidencePanel review={review} goalId={goal?.id ?? null} onClose={closeEvidence} onSource={evidenceSource} />}
+          <div className="source-review-surface" hidden={evidenceOpen}>
+            {mode === "map" ? (
+              <div className="mapbar">
+                <b>Map</b>
+                {hasGoals ? "Every changed file on its layer, every chunk open. The numbers on each chunk are the goals it serves; click one to review that goal." : "Every changed file on its layer, every chunk open. No agent has planned goals for this PR yet."}
+              </div>
+            ) : (
+              goal && (
+                <GoalBar
                   goal={goal}
-                  g={g}
-                  stop={s}
-                  onGoal={go}
-                  onStop={(si) => goStop(si, { scroll: false })}
-                  onGoalBadge={goToGoalId}
-                  onMap={() => switchMode("map")}
-                  onFileClick={(si) => goStop(si)}
+                  gi={g}
+                  realCount={idx.realCount}
+                  state={state}
+                  chunkless={chunkless}
+                  onToggleReviewed={toggleReviewed}
+                  onOpenFile={ctx.openFile}
                 />
-              ) : (
-                <CoursePage
-                  worldRef={worldRef}
-                  goal={goal}
-                  g={g}
-                  stop={s}
-                  far={zoom.far}
-                  onGoal={go}
-                  onStop={(si) => goStop(si, { scroll: false })}
-                  onGoalBadge={goToGoalId}
-                  onMap={() => switchMode("map")}
-                  onFarClick={(frame, firstStop) => {
-                    zoom.zoomToElement(frame);
-                    if (firstStop !== null) goStop(firstStop);
-                  }}
-                />
-              )}
+              )
+            )}
+            <div
+              className="viewport"
+              ref={vpRef}
+              onPointerDown={() => focusing && setFocusing(false)}
+              onWheel={(e) => focusing && !e.ctrlKey && Math.abs(e.deltaY) > 40 && setFocusing(false)}
+            >
+              <div className={`world${zoom.far ? " far" : ""}`} ref={worldRef}>
+                {mode === "map" ? (
+                  <MapView focusOob={focusOob} onGoalBadge={goToGoalId} far={zoom.far} onFarClick={zoom.zoomToElement} reveal={reveal} />
+                ) : layout === "diff" ? (
+                  <DiffColumn
+                    goal={goal}
+                    g={g}
+                    stop={s}
+                    onGoal={go}
+                    onStop={(si) => goStop(si, { scroll: false })}
+                    onGoalBadge={goToGoalId}
+                    onMap={() => switchMode("map")}
+                    onFileClick={(si) => goStop(si)}
+                  />
+                ) : (
+                  <CoursePage
+                    worldRef={worldRef}
+                    goal={goal}
+                    g={g}
+                    stop={s}
+                    far={zoom.far}
+                    onGoal={go}
+                    onStop={(si) => goStop(si, { scroll: false })}
+                    onGoalBadge={goToGoalId}
+                    onMap={() => switchMode("map")}
+                    onFarClick={(frame, firstStop) => {
+                      zoom.zoomToElement(frame);
+                      if (firstStop !== null) goStop(firstStop);
+                    }}
+                  />
+                )}
+              </div>
             </div>
-          </div>
-          {drawer?.kind === "chunk" && <ChunkDrawer hunkId={drawer.hunkId} symbols={drawer.symbols} onClose={() => setDrawer(null)} onGoToGoal={goToGoalId} />}
-          {drawer?.kind === "file" && <FileDrawer fileId={drawer.fileId} onClose={() => setDrawer(null)} />}
-          <KeysBar mode={mode} layout={layout} />
-          {(mode === "map" || layout === "canvas") && (
-            <button className="btn zoom-btn" onClick={zoom.toggleOverview}>
-              {pct}% · {zoom.far ? "Back to reading" : mode === "map" ? "Zoom out" : "Whole course"}
-            </button>
-          )}
-          <div className={`toast${toast ? " show" : ""}`} role="status" aria-live="polite">
-            {toast}
+            {drawer?.kind === "chunk" && <ChunkDrawer hunkId={drawer.hunkId} symbols={drawer.symbols} onClose={() => setDrawer(null)} onGoToGoal={goToGoalId} />}
+            {drawer?.kind === "file" && <FileDrawer fileId={drawer.fileId} onClose={() => setDrawer(null)} />}
+            <KeysBar mode={mode} layout={layout} />
+            {(mode === "map" || layout === "canvas") && (
+              <button className="btn zoom-btn" onClick={zoom.toggleOverview}>
+                {pct}% · {zoom.far ? "Back to reading" : mode === "map" ? "Zoom out" : "Whole course"}
+              </button>
+            )}
+            <div className={`toast${toast ? " show" : ""}`} role="status" aria-live="polite">
+              {toast}
+            </div>
           </div>
           <ReviewDrawer
             open={reviewOpen}

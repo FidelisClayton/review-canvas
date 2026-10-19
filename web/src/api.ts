@@ -1,4 +1,4 @@
-import type { ReviewPayload, ReviewState, Verdict } from "@review-canvas/shared";
+import type { BehaviorComparison, DeploymentPayload, EvidenceDetailPayload, EvidenceIndex, EvidenceSourcePayload, RevisionFilePayload, RevisionIndexPayload, ReviewPayload, ReviewState, Verdict } from "@review-canvas/shared";
 
 export interface ReviewSummary {
   id: string;
@@ -48,3 +48,25 @@ export async function fetchHeadFile(reviewId: string, fileId: string): Promise<H
     return { status: "error", message: e instanceof Error ? e.message : "Could not reach the server." };
   }
 }
+
+
+const reviewPath = (id: string) => `/api/reviews/${encodeURIComponent(id)}`;
+export const fetchEvidenceIndex = (id: string): Promise<EvidenceIndex> => fetch(`${reviewPath(id)}/evidence`).then(r => json<EvidenceIndex>(r));
+export const fetchEvidenceRun = (id: string, runId: string): Promise<EvidenceDetailPayload> => fetch(`${reviewPath(id)}/evidence/${encodeURIComponent(runId)}`).then(r => json<EvidenceDetailPayload>(r));
+export function fetchEvidenceSource(id: string, runId: string, ref: number, observation?: string): Promise<EvidenceSourcePayload> {
+  const query = new URLSearchParams({ ref: String(ref), ...(observation === undefined ? {} : { observation }) });
+  return fetch(`${reviewPath(id)}/evidence/${encodeURIComponent(runId)}/source?${query}`).then(r => json<EvidenceSourcePayload>(r));
+}
+export function compareEvidenceRuns(id: string, left: string, right: string, mode: "runs" | "base-head" = "base-head"): Promise<BehaviorComparison> {
+  const query = new URLSearchParams({ left, right, mode });
+  return fetch(`${reviewPath(id)}/evidence/compare?${query}`).then(r => json<BehaviorComparison>(r));
+}
+export function fetchRevisionComparison(id: string, baseline?: string): Promise<RevisionIndexPayload> {
+  const query = baseline === undefined ? "" : `?${new URLSearchParams({ baseline })}`;
+  return fetch(`${reviewPath(id)}/revisions${query}`).then(r => json<RevisionIndexPayload>(r));
+}
+export function fetchRevisionFile(id: string, baseline: string, path: string): Promise<RevisionFilePayload> {
+  const query = new URLSearchParams({ baseline, path });
+  return fetch(`${reviewPath(id)}/revisions/file?${query}`).then(r => json<RevisionFilePayload>(r));
+}
+export const fetchDeployment = (id: string): Promise<DeploymentPayload> => fetch(`${reviewPath(id)}/deployment`).then(r => json<DeploymentPayload>(r));

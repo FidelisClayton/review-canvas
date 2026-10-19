@@ -5,7 +5,7 @@ import { needsMark, totals, type CourseIndex } from "./course/model";
 
 const base = (p: string) => p.split("/").pop() ?? p;
 
-export function TopBar({ review, drafts, mode, onMode, onReview, onCourse, courseOpen, layout, onLayout }: { review: Review; drafts: number; mode: "guided" | "map"; onMode: (m: "guided" | "map") => void; layout?: "canvas" | "diff"; onLayout?: (l: "canvas" | "diff") => void; onReview: () => void; onCourse: () => void; courseOpen: boolean }) {
+export function TopBar({ review, drafts, mode, onMode, onReview, onCourse, courseOpen, layout, onLayout, evidenceOpen, onEvidence }: { review: Review; drafts: number; mode: "guided" | "map"; onMode: (m: "guided" | "map") => void; layout?: "canvas" | "diff"; onLayout?: (l: "canvas" | "diff") => void; onReview: () => void; onCourse: () => void; courseOpen: boolean; evidenceOpen?: boolean; onEvidence?: () => void }) {
   const { pr } = review.analysis;
   return (
     <header className="top">
@@ -63,6 +63,7 @@ export function TopBar({ review, drafts, mode, onMode, onReview, onCourse, cours
           No course
         </span>
       )}
+      {onEvidence && <button className="btn" data-evidence-toggle aria-pressed={evidenceOpen} onClick={onEvidence}>Evidence</button>}
       <button className="btn primary" onClick={onReview}>
         <span className="lbl">Review</span>
         <span className="count">{drafts}</span>
