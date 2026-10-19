@@ -75,7 +75,7 @@ export async function recordExecution(options: RecorderOptions): Promise<Executi
   catch { issue("Git repository root unavailable; working-tree provenance is unknown"); }
   if (root) {
     try { repository = repositoryOf((await git(root, ["remote", "get-url", "origin"])).toString("utf8")); }
-    catch { /* Missing origin is unknown identity. */ }
+    catch {}
     if (repository && !sameRepository(target, repository)) throw new Error("Command repository differs from review target repository");
     if (!repository) issue("Git repository identity unavailable; working-tree provenance is unknown");
     try { revision = revisionSchema.parse((await git(root, ["rev-parse", "HEAD"])).toString("utf8").trim()); }
@@ -115,13 +115,12 @@ export async function recordExecution(options: RecorderOptions): Promise<Executi
           if (input.sourceRefs.some(ref => !sameRepository(ref, repository) || ref.revision !== revision)) throw new Error("Source reference differs from command provenance");
           if (ids.has(input.id)) issue("Duplicate observation ID omitted");
           else {
-            ids.add(input.id);
             lastReceipt = Math.max(lastReceipt, Date.now());
             const observation = { ...input, sequence: receivedObservations - 1, at: new Date(lastReceipt).toISOString() };
             const size = Buffer.byteLength(JSON.stringify(observation));
             if (observations.length >= 2000) issue("Observation count exceeds 2000");
             else if (traceBytes + size > TRACE_LIMIT) issue("Trace storage exceeds 1 MiB");
-            else { observations.push(observation); traceBytes += size; }
+            else { ids.add(input.id); observations.push(observation); traceBytes += size; }
           }
         } catch { issue("Malformed or invalid protocol observation omitted"); }
       }
@@ -146,18 +145,42 @@ export async function recordExecution(options: RecorderOptions): Promise<Executi
   const posix = process.platform !== "win32";
   if (!posix) issue("Process-group termination is unavailable on this platform; descendants may survive");
   await new Promise<void>((settle) => {
+    if (options.signal?.aborted) {
+      termination = "interrupted"; issue("Command interrupted"); settle(); return;
+    }
     const child = spawn(options.argv[0]!, options.argv.slice(1), { cwd, shell: false, detached: posix, stdio: ["ignore", "pipe", "pipe"], env: { ...process.env, REVIEW_CANVAS_SCENARIO_INPUT: canonicalJson(manifest.inputs) } });
     let escalation: NodeJS.Timeout | undefined;
-    let closed = false;
+    let drain: NodeJS.Timeout | undefined;
+    let exited = false; let closed = false; let forced = false; let settled = false;
+    const finish = () => {
+      if (settled || escalation || (!closed && !forced)) return;
+      settled = true;
+      clearTimeout(timer); clearTimeout(drain);
+      options.signal?.removeEventListener("abort", abort);
+      if (line.length || lineOverflow) parseLine();
+      settle();
+    };
+    const drainAfterExit = () => {
+      if (closed || drain || forced) return;
+      drain = setTimeout(() => {
+        drain = undefined;
+        if (!child.stdout.readableEnded || !child.stderr.readableEnded) issue("Command output pipes remained open after exit or termination");
+        child.stdout.destroy(); child.stderr.destroy();
+        forced = true; finish();
+      }, 300);
+    };
     const kill = (killSignal: NodeJS.Signals) => {
       try { if (posix && child.pid) process.kill(-child.pid, killSignal); else child.kill(killSignal); }
       catch (error) { if ((error as NodeJS.ErrnoException).code !== "ESRCH") issue("Could not terminate command process group"); }
     };
     const stop = (reason: "timed_out" | "interrupted") => {
-      if (termination !== "exited") return;
+      if (termination !== "exited" || exited || closed) return;
       termination = reason; issue(reason === "timed_out" ? "Command timed out" : "Command interrupted");
       kill("SIGTERM");
-      escalation = setTimeout(() => { kill("SIGKILL"); escalation = undefined; if (closed) settle(); }, 300);
+      escalation = setTimeout(() => {
+        kill("SIGKILL"); escalation = undefined;
+        drainAfterExit(); finish();
+      }, 300);
     };
     const abort = () => stop("interrupted");
     const timer = setTimeout(() => stop("timed_out"), timeoutMs);
@@ -174,16 +197,19 @@ export async function recordExecution(options: RecorderOptions): Promise<Executi
       if (keep) { const bytes = chunk.subarray(0, keep); stderr.push(bytes); stderrBytes += bytes.length; }
     });
     child.on("error", () => { if (termination === "exited") termination = "spawn_error"; issue("Command could not be spawned"); });
-    child.on("close", (code, terminalSignal) => {
-      clearTimeout(timer);
-      closed = true;
-      options.signal?.removeEventListener("abort", abort);
+    child.on("exit", (code, terminalSignal) => {
+      exited = true;
       exitCode = code; signal = terminalSignal;
       if (termination === "exited" && terminalSignal) { termination = "signaled"; issue("Command terminated by signal"); }
-      if (line.length || lineOverflow) parseLine();
-      if (!escalation) settle();
+      clearTimeout(timer);
+      options.signal?.removeEventListener("abort", abort);
+      drainAfterExit();
     });
-    if (options.signal?.aborted) abort();
+    child.on("close", (code, terminalSignal) => {
+      closed = true;
+      if (!exited) { exitCode = code; signal = terminalSignal; }
+      finish();
+    });
   });
   if (!receivedObservations) issue("No structured observations were received");
   const finishedAt = new Date(Math.max(lastReceipt, Date.now())).toISOString();
@@ -212,7 +238,6 @@ export async function recordExecution(options: RecorderOptions): Promise<Executi
   }
   executionBundleSchema.parse(bundle);
   const serialized = JSON.stringify(bundle, null, 2);
-  // Whitespace is deliberately excluded: its cost must not defeat the import limit.
   const output = Buffer.byteLength(serialized) <= BUNDLE_LIMIT ? serialized : JSON.stringify(bundle);
   if (Buffer.byteLength(output) > BUNDLE_LIMIT) throw new Error("Required bundle metadata exceeds 2 MiB");
   const destination = resolve(options.outPath);

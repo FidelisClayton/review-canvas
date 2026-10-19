@@ -2,9 +2,12 @@ import { execFileSync } from "node:child_process";
 import { mkdtemp, readFile, rm, writeFile, mkdir } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import * as filesystem from "node:fs/promises";
 import { executionBundleSchema, knownCleanWorktree } from "@review-canvas/shared";
 import { recordExecution, type RecorderOptions } from "./recorder.js";
+
+vi.mock("node:fs/promises", { spy: true });
 
 const dirs: string[] = [];
 const target = { owner: "synthetic", repo: "retry-demo", number: 1 };
@@ -106,13 +109,17 @@ describe("recordExecution real children", () => {
 describe("capture budgets and provenance edge cases", () => {
   it("counts but omits observations beyond 2000 and trace storage beyond 1 MiB", async () => {
     const { options } = await setup();
-    options.argv = [process.execPath, "-e", `for(let i=0;i<2005;i++)console.log('REVIEW_CANVAS_EVENT '+JSON.stringify({id:'step-'+i,kind:'output',title:'Step',value:i,sourceRefs:[]}))`];
+    options.argv = [process.execPath, "-e", `for(let i=0;i<2005;i++)console.log('REVIEW_CANVAS_EVENT '+JSON.stringify({id:'step-'+i,kind:'output',title:'Step',value:i,sourceRefs:[]}));console.log(${JSON.stringify(event('step-2004'))})`];
     const counted = await recordExecution(options);
-    expect(counted.observations).toHaveLength(2000); expect(counted.capture.receivedObservations).toBe(2005);
+    expect(counted.observations).toHaveLength(2000); expect(counted.capture.receivedObservations).toBe(2006);
+    expect(counted.capture.issues).not.toContain("Duplicate observation ID omitted");
     expect(counted.capture.issues.join(' ')).toContain("2000");
-    options.argv = [process.execPath, "-e", `for(let i=0;i<24;i++)console.log('REVIEW_CANVAS_EVENT '+JSON.stringify({id:'step-'+i,kind:'output',title:'Step',value:'x'.repeat(60000),sourceRefs:[]}))`];
+    options.argv = [process.execPath, "-e", `for(let i=0;i<24;i++)console.log('REVIEW_CANVAS_EVENT '+JSON.stringify({id:'step-'+i,kind:'output',title:'Step',value:'x'.repeat(60000),sourceRefs:[]}));console.log(${JSON.stringify(event('step-23'))})`];
     const bounded = await recordExecution(options);
-    expect(bounded.capture.receivedObservations).toBe(24); expect(bounded.observations.length).toBeLessThan(24);
+    expect(bounded.capture.receivedObservations).toBe(25);
+    expect(bounded.observations.at(-1)?.id).toBe("step-23");
+    expect(bounded.capture.issues).not.toContain("Duplicate observation ID omitted");
+    expect(bounded.observations.length).toBeLessThan(24);
     expect(bounded.capture.issues.join(' ')).toContain("1 MiB");
     expect(executionBundleSchema.safeParse(bounded).success).toBe(true);
   });
@@ -172,6 +179,75 @@ describe("capture budgets and provenance edge cases", () => {
     expect(bundle.provenance.worktree.before).toEqual({ dirty: null, fingerprint: null });
     expect(bundle.observations).toHaveLength(1); expect(bundle.observations[0]?.sequence).toBe(1);
     expect(bundle.capture.status).toBe('partial');
+  });
+  it("skips command startup when aborted during the initial fingerprint", async () => {
+    const { cwd, options } = await setup();
+    const pendingFile = join(cwd, "untracked");
+    await writeFile(pendingFile, "fingerprint input");
+    const controller = new AbortController(); options.signal = controller.signal;
+    options.argv = [process.execPath, "-e", "require('fs').writeFileSync('started','yes')"];
+    const { readFile: originalReadFile } = await vi.importActual<typeof filesystem>("node:fs/promises");
+    let fingerprintRead = false;
+    const read = vi.spyOn(filesystem, "readFile").mockImplementation(async (...args: Parameters<typeof originalReadFile>) => {
+      if (args[0] === pendingFile && !fingerprintRead) {
+        fingerprintRead = true;
+        await new Promise<void>(resolve => setImmediate(() => { controller.abort(); resolve(); }));
+      }
+      return originalReadFile(...args);
+    });
+    try {
+      const bundle = await recordExecution(options);
+      expect(fingerprintRead).toBe(true);
+      expect(bundle.process).toMatchObject({ termination: "interrupted", exitCode: null, signal: null });
+      expect(bundle.capture.issues).toContain("Command interrupted");
+      await expect(readFile(join(cwd, "started"))).rejects.toThrow();
+      expect(executionBundleSchema.safeParse(JSON.parse(await readFile(options.outPath, "utf8"))).success).toBe(true);
+    } finally { read.mockRestore(); }
+  });
+  it.each(["exit", "timeout"])("bounds detached inherited pipes after %s and flushes the final observation", async reason => {
+    if (process.platform === "win32") return;
+    const { cwd, options } = await setup();
+    options.timeoutMs = reason === "timeout" ? 200 : 5000;
+    options.argv = [process.execPath, "-e", `const {spawn}=require('child_process');const holder=spawn(process.execPath,['-e',"setInterval(()=>{},100)"],{detached:true,stdio:'inherit'});holder.unref();require('fs').writeFileSync('ignored',String(holder.pid));process.stdout.write(${JSON.stringify(event())});${reason === "exit" ? "process.exit(7)" : "process.on('SIGTERM',()=>{});setInterval(()=>{},100)"}`];
+    let deadline: NodeJS.Timeout | undefined;
+    const recording = recordExecution(options);
+    try {
+      const bundle = await Promise.race([recording, new Promise<never>((_, reject) => { deadline = setTimeout(() => reject(new Error("Recorder did not bound inherited pipes")), 1500); })]);
+      expect(bundle.process).toMatchObject(reason === "exit" ? { termination: "exited", exitCode: 7, signal: null } : { termination: "timed_out", exitCode: null, signal: "SIGKILL" });
+      expect(bundle.capture.status).toBe("partial");
+      expect(bundle.capture.issues.join(" ")).toMatch(/output pipes.*open/i);
+      expect(bundle.observations.map(observation => observation.id)).toEqual(["output"]);
+      expect(executionBundleSchema.safeParse(JSON.parse(await readFile(options.outPath, "utf8"))).success).toBe(true);
+    } finally {
+      clearTimeout(deadline);
+      try { process.kill(Number(await readFile(join(cwd, "ignored"), "utf8")), "SIGKILL"); }
+      catch (error) { if ((error as NodeJS.ErrnoException).code !== "ESRCH") throw error; }
+      await recording;
+    }
+  });
+  it("drains inherited output that closes before the grace period without losing main exit metadata", async () => {
+    if (process.platform === "win32") return;
+    const { options } = await setup();
+    options.argv = [process.execPath, "-e", `const child=require('child_process').spawn(process.execPath,['-e',${JSON.stringify(`setTimeout(()=>console.log(${JSON.stringify(event())}),50)`)}],{stdio:'inherit'});child.unref();process.exit(7)`];
+    const bundle = await recordExecution(options);
+    expect(bundle.process).toMatchObject({ termination: "exited", exitCode: 7, signal: null });
+    expect(bundle.capture.status).toBe("complete");
+    expect(bundle.observations.map(observation => observation.id)).toEqual(["output"]);
+  });
+  it("keeps process-group escalation scheduled when the main child closes after SIGTERM", async () => {
+    if (process.platform === "win32") return;
+    const { cwd, options } = await setup(); options.timeoutMs = 200;
+    options.argv = [process.execPath, "-e", `const holder=require('child_process').spawn(process.execPath,['-e',"process.on('SIGTERM',()=>{});setInterval(()=>{},100)"],{stdio:'ignore'});holder.unref();require('fs').writeFileSync('ignored',String(holder.pid));console.log('REVIEW_CANVAS_EVENT '+JSON.stringify({id:'pid',kind:'output',title:'Main PID',value:process.pid,sourceRefs:[]}));setInterval(()=>{},100)`];
+    const kill = vi.spyOn(process, "kill");
+    try {
+      const bundle = await recordExecution(options);
+      expect(bundle.process).toMatchObject({ termination: "timed_out", signal: "SIGTERM" });
+      expect(kill).toHaveBeenCalledWith(-Number(bundle.observations[0]?.value), "SIGKILL");
+    } finally {
+      kill.mockRestore();
+      try { process.kill(Number(await readFile(join(cwd, "ignored"), "utf8")), "SIGKILL"); }
+      catch (error) { if ((error as NodeJS.ErrnoException).code !== "ESRCH") throw error; }
+    }
   });
   it("escalates a POSIX process group when child and descendant ignore SIGTERM", async () => {
     if (process.platform === 'win32') return;
